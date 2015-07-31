@@ -3,6 +3,7 @@
 .align 2
 .globl screen_varBackColor
 screen_varBackColor: .int 0xFF381423
+.align 2
 .globl screen_varForeColor
 screen_varForeColor: .int 0xFFF09EC2
 
@@ -14,7 +15,6 @@ font:
 	.incbin "font.bin"
 
 .align 4
-.globl screen_varFrameBufferInfo 
 screen_varFrameBufferInfo:
 	.int 1920   // 0 Physical Width
 	.int 1080	// #4 Physical Height
@@ -27,41 +27,62 @@ screen_varFrameBufferInfo:
 	.int 0		// #32 GPU - Pointer
 	.int 0		// #36 GPU - Size
 
-/*	.int 108	// size
-	.int 0
-
-	.int 0x00048003 // set_physical_display
-	.int 8
-	.int 8
-	.int 1680
-	.int 1050
-
-	.int 0x00048004 // set_virtual_buffer
-	.int 8
-	.int 8
-	.int 1680
-	.int 1050
-
-	.int 0x00048005 // t_set_depth
-	.int 4
-	.int 4
-	.int 16
-
-	.int 0x00048009 // t_set_virtual_offset
-	.int 8
-	.int 8
-	.int 0
-	.int 0
-
-	.int 0x00040001 // t_allocate_buffer
-	.int 8
-	.int 8
-	.int 0
-	.int 0
-
-	.int 0 // End tag*/
-
 .section .text
+.globl screen_getFrameBuffer
+screen_getFrameBuffer:
+    ldr r1,=screen_varFrameBufferInfo
+    ldr r0,[r1,#32]
+    sub r0,#0xC0000000
+    mov pc,lr
+
+.globl screen_getWidth
+screen_getWidth:
+    ldr r1,=screen_varFrameBufferInfo
+    ldr r0,[r1,#8]
+    mov pc,lr
+
+.globl screen_getHeight
+screen_getHeight:
+    ldr r1,=screen_varFrameBufferInfo
+    ldr r0,[r1,#12]
+    mov pc,lr
+
+.globl screen_getPitch
+screen_getPitch:
+    ldr r1,=screen_varFrameBufferInfo
+    ldr r0,[r1,#16]
+    mov pc,lr
+
+.globl screen_getSize
+screen_getSize:
+    ldr r1,=screen_varFrameBufferInfo
+    ldr r0,[r1,#36]
+    mov pc,lr
+
+.globl screen_getTextCursorX
+screen_getTextCursorX:
+    ldr r1,=screen_textCursorX
+    ldr r0,[r1]
+    mov pc,lr
+
+.globl screen_getTextCursorY
+screen_getTextCursorY:
+    ldr r1,=screen_textCursorY
+    ldr r0,[r1]
+    mov pc,lr
+
+.globl screen_setTextCursorX
+screen_setTextCursorX:
+    ldr r1,=screen_textCursorX
+    ldr r0,[r1]
+    mov pc,lr
+
+.globl screen_setTextCursorY
+screen_setTextCursorY:
+    ldr r1,=screen_textCursorY
+    ldr r0,[r1]
+    mov pc,lr
+
 .globl screen_init
 screen_init:
 	push {r4,lr}
@@ -88,31 +109,6 @@ screen_init:
 	mov r0,r4
 
 	pop {r4,pc}
-
-/*
-screen_init:
-	push {r4,lr}
-
-	ldr r4,=screen_varFrameBufferInfo
-	mov r0,r4
-	add r0,#0xC0000000
-
-	// Write
-	add r0,#8
-	ldr r1,=0x3F00B8A8
-	str r0,[r1]
-
-	waitForFB$:
-		ldr r2,[r4,#96]
-		teq r2,#0
-		beq waitForFB$
-
-	bl gpio_turnLEDOff
-
-	ldr r0,=screen_varFrameBufferInfo
-
-	pop {r4,pc}
-	*/
 
 // r0 = ARGB color
 .globl screen_clear
@@ -254,7 +250,304 @@ screen_print:
 	endPrint$:
 		pop {r4,pc}
 
+// Print an unsigned int in decimal
+// r0 = Number
+// r1 = Fore color
+.globl screen_printU32
+screen_printU32:
+    cmp r0,#0
+    addeq r0,#'0'
+    beq screen_printChar
+
+    push {r4,r5,r6,lr}
+
+    num .req r0
+	modulo .req r3
+    ten .req r4
+    invNum .req r5
+	count .req r6
+
+    mov ten,#10
+    mov invNum,#0
+	mov count,#0
+
+    decInv$:
+		// Move on if our number is 0
+        cmp num,#0
+        beq devPrint$ 
+
+		// calculate modulo
+		udiv modulo,num,ten
+		mul modulo,ten
+		sub modulo,num,modulo
+
+		// Append the number at the end
+		mul invNum,ten
+		add invNum,modulo
+
+		// Div,Inc,Loop back
+        udiv num,ten
+		add count,#1
+        b decInv$
+
+    devPrint$:
+		// Check if we are done the count
+        cmp count,#0
+        popeq {r4,r5,r6,pc}
+
+		// Calculate modulo
+		udiv modulo,invNum,ten
+		mul modulo,ten
+		sub modulo,invNum,modulo
+
+		// Print the modulo number
+		mov r0,modulo
+		add r0,#'0'
+		bl screen_printChar
+
+		// Div, dec, loop back
+        udiv invNum,ten
+		sub count,#1
+        b devPrint$
+
+    .unreq invNum
+    .unreq num
+    .unreq ten
+	.unreq modulo
+	.unreq count
+
+dec2hex:
+    cmp r0,#10
+    addhi r0,#7
+    add r0,#'0'
+    mov pc,lr
+
+// Print an hexadecimal address
+// r0 = Address
+// r1 = Fore color
+.globl screen_printAddr
+screen_printAddr:
+    push {r4,lr}
+    mov r4,r0
+    mov r0,#'0'
+    bl screen_printChar
+    mov r0,#'x'
+    bl screen_printChar
+
+    mov r0,r4
+    lsr r0,#28
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    mov r0,r4
+    lsr r0,#24
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    mov r0,r4
+    lsr r0,#20
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    mov r0,r4
+    lsr r0,#16
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    mov r0,r4
+    lsr r0,#12
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    mov r0,r4
+    lsr r0,#8
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    mov r0,r4
+    lsr r0,#4
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    mov r0,r4
+    and r0,#0xF
+    bl dec2hex
+    bl screen_printChar
+
+    pop {r4,pc}
+
+.section .data
+.align 2
+FRAME_BUFFER_TEXT: .ascii    "Frame buffer:\n\0"
+NEW_LINE_TEXT: .ascii "\n\0"
+PHYSICAL_WIDTH_TEXT: .ascii  "    Physical Width  = \0"
+PHYSICAL_HEIGHT_TEXT: .ascii "    Physical Height = \0"
+VIRTUAL_WIDTH_TEXT: .ascii   "Virtual Width   = \0"
+VIRTUAL_HEIGHT_TEXT: .ascii  "Virtual Height  = \0"
+PITCH_TEXT: .ascii           "Pitch       = \0"
+COLOR_DEPTH_TEXT: .ascii     "Color Depth = \0"
+POINTER_TEXT: .ascii         "Address = \0"
+SIZE_TEXT: .ascii            "Size    = \0"
+COMMA_TEXT: .ascii ", \0"
+
+.section .text
 .globl screen_printInfo
 screen_printInfo:
+	push {lr}
 
-	mov pc,lr
+    // Set text color
+    ldr r2,=screen_varForeColor
+    ldr r1,[r2]
+
+    ldr r0,=FRAME_BUFFER_TEXT
+    bl screen_print
+
+    // Line 1
+    ldr r0,=PHYSICAL_WIDTH_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#0]
+    bl screen_printU32
+
+	ldr r2,=screen_textCursorX
+	mov r0,#1024
+	str r0,[r2] // Move X cursor to 32 characters
+    ldr r0,=VIRTUAL_WIDTH_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#8]
+    bl screen_printU32
+
+	ldr r2,=screen_textCursorX
+	mov r0,#1920
+	str r0,[r2] // Move X cursor
+    ldr r0,=PITCH_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#16]
+    bl screen_printU32
+
+	ldr r2,=screen_textCursorX
+	mov r0,#2688
+	str r0,[r2] // Move X cursor
+    ldr r0,=POINTER_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#32]
+    sub r0,#0xC0000000
+    bl screen_printAddr
+
+    ldr r0,=NEW_LINE_TEXT
+    bl screen_print
+
+
+
+    // Line 2
+    ldr r0,=PHYSICAL_HEIGHT_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#4]
+    bl screen_printU32
+
+	ldr r2,=screen_textCursorX
+	mov r0,#1024
+	str r0,[r2] // Move X cursor to 32 characters
+    ldr r0,=VIRTUAL_HEIGHT_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#12]
+    bl screen_printU32
+
+	ldr r2,=screen_textCursorX
+	mov r0,#1920
+	str r0,[r2] // Move X cursor
+    ldr r0,=COLOR_DEPTH_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#20]
+    bl screen_printU32
+
+	ldr r2,=screen_textCursorX
+	mov r0,#2688
+	str r0,[r2] // Move X cursor
+    ldr r0,=SIZE_TEXT
+    bl screen_print
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#36]
+    bl screen_printU32
+
+    ldr r0,=NEW_LINE_TEXT
+    bl screen_print
+
+	pop {pc}
+
+// Draw a rectangle on the screen
+// r0 = x1
+// r1 = y1
+// r2 = x2
+// r3 = y2
+// r4 = color
+.globl screen_drawRect
+screen_drawRect:
+    x1 .req r5
+    y1 .req r6
+    x2 .req r7
+    y2 .req r8
+    colour .req r9
+    frameBuffer .req r4
+    yAdvance .req r3
+
+    push {r4-r9,lr}
+
+    mov x1,r0
+    mov y1,r1
+    mov x2,r2
+    mov y2,r3
+    mov colour,r4
+
+    // Do some validation
+
+    bl screen_getFrameBuffer
+    mov frameBuffer,r0
+    bl screen_getPitch
+    mul r0,y1
+    add frameBuffer,r0
+    mov r0,x1
+    lsl r0,#2
+    add frameBuffer,r0
+
+    mov yAdvance,x1
+    bl screen_getWidth
+    sub r0,x2
+    add yAdvance,r0
+    lsl yAdvance,#2
+
+    loopY$:
+        mov r0,x1
+        loopX$:
+            str colour,[frameBuffer],#4
+            add r0,#1
+            cmp r0,x2
+            blo loopX$
+        add frameBuffer,yAdvance
+        add y1,#1
+        cmp y1,y2
+        blo loopY$
+
+    .unreq x1
+    .unreq y1
+    .unreq x2
+    .unreq y2
+    .unreq colour
+    .unreq frameBuffer
+    .unreq yAdvance
+
+    pop {r4-r9,pc}
+

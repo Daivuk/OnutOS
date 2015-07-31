@@ -28,6 +28,13 @@ SECTIONS {
 	.data : {
 		*(.data)
 	}
+	
+	/* 
+	* Put the end marker at the end
+	*/
+	.end : {
+		*(.end)
+	}
 
 	/*
 	* Finally comes everything else. A fun trick here is to put all other 
