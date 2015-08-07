@@ -3,12 +3,17 @@
 .align 2
 .globl screen_varBackColor
 screen_varBackColor: .int 0xFF381423
-.align 2
 .globl screen_varForeColor
 screen_varForeColor: .int 0xFFF09EC2
+.globl screen_okColor
+screen_okColor: .int 0xFF00FF00
+.globl screen_failColor
+screen_failColor: .int 0xFFFF0000
 
 screen_textCursorX:	.int 0
 screen_textCursorY:	.int 0
+
+screen_tabSize: .int 4
 
 .align 4
 font:
@@ -74,13 +79,25 @@ screen_getTextCursorY:
 .globl screen_setTextCursorX
 screen_setTextCursorX:
     ldr r1,=screen_textCursorX
-    ldr r0,[r1]
+    str r0,[r1]
     mov pc,lr
 
 .globl screen_setTextCursorY
 screen_setTextCursorY:
     ldr r1,=screen_textCursorY
+    str r0,[r1]
+    mov pc,lr
+
+.globl screen_getTabSize
+screen_getTabSize:
+    ldr r1,=screen_tabSize
     ldr r0,[r1]
+    mov pc,lr
+
+.globl screen_setTabSize
+screen_setTabSize:
+    ldr r1,=screen_tabSize
+    str r0,[r1]
     mov pc,lr
 
 .globl screen_init
@@ -232,6 +249,9 @@ screen_print:
 		cmp r0,#'\n'
 		beq newLine$
 
+        cmp r0,#'\t'
+        beq doTab$
+
 		bl screen_printChar
 		b loopChars$
 
@@ -245,6 +265,20 @@ screen_print:
 			add r2,#16
 			str r2,[r0]
 
+			b loopChars$
+
+        doTab$:
+            push {r1}
+            bl screen_getTabSize
+            mov r3,r0
+            lsl r3,#3
+			bl screen_getTextCursorX
+            udiv r0,r3
+            mul r0,r3
+            add r0,r3
+            bl screen_setTextCursorX
+            pop {r1}
+            
 			b loopChars$
 
 	endPrint$:
@@ -317,7 +351,7 @@ screen_printU32:
 	.unreq count
 
 dec2hex:
-    cmp r0,#10
+    cmp r0,#9
     addhi r0,#7
     add r0,#'0'
     mov pc,lr
@@ -382,6 +416,36 @@ screen_printAddr:
     bl screen_printChar
 
     pop {r4,pc}
+
+// r0 = number
+// r1 = fore color
+// r2 = count
+.globl screen_printHex
+screen_printHex:
+    push {r4-r6,lr}
+
+    num .req r4
+    i .req r5
+
+    mov num,r0
+    mov i,r2
+    lsl i,#2
+    screen_printHex_loop$:
+        sub i,#4
+
+        mov r0,num
+        lsr r0,i
+        and r0,#0xF
+        bl dec2hex
+        bl screen_printChar
+        
+        cmp i,#0
+        bne screen_printHex_loop$
+
+    .unreq num
+    .unreq i
+
+    pop {r4-r6,pc}
 
 .section .data
 .align 2
