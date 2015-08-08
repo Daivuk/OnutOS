@@ -1,8 +1,6 @@
 #define USB_CORE_ADDR 0x3F980000
 #define USB_HOST_ADDR 0x3F980400
 #define USB_POWER_ADDR 0x3F980E00
-#define USB_TAG_SET_POWER_STATE 0x00028001
-#define USB_MAILBOX_CHANNEL 8
 
 .section .data
 .align 2
@@ -15,28 +13,26 @@ POWERING_USB_OK: .asciz      "[Success]\n"
 POWERING_USB_FAIL: .asciz    "[Failed]\n"
 HCD_HARDWARE_CONFIG_TEXT: .asciz "    HCD: Hardware configuration: "
 HCD_HOST_CONFIG_TEXT: .asciz "    HCD: Host configuration: "
+HCD_DISABLING_IRQS_TEXT: .asciz "    HCD: Disabling interrupts.\n"
+HCD_LOAD_COMPLETE_TEXT: .asciz "    HCD: Load completed.\n"
 
 TAB_TEXT: .asciz "\t"
 ENDL_TEXT: .asciz "\n"
-
-.align 4
-usb_powerTag:
-    .int 28 // Buffer size
-    .int 0 // Request code
-    .int USB_TAG_SET_POWER_STATE // Tag id
-    .int 8 // value size
-    .int 3 // Device id
-    .int 3 // Value
-    .int 0 // End tag
 
 .section .text
 .globl usb_init
 usb_init:
     push {lr}
     
-    bl usb_printDevice
-
+    bl usb_initHCD
     bl usb_powerOn
+
+    ldr r0,=HCD_LOAD_COMPLETE_TEXT
+    ldr r2,=screen_varForeColor
+	ldr r1,[r2]
+    bl screen_print
+
+    bl usb_hcdStart
 
     pop {pc}
 
@@ -48,16 +44,14 @@ usb_powerOn:
 	ldr r1,[r2]
     bl screen_print
 
-    ldr r4,=usb_powerTag
-    add r4,#0xC0000000
-    mov r0,r4
-	mov r1,#USB_MAILBOX_CHANNEL
+    mov r0,#0x80
+    mov r1,#0
     bl mailbox_write
 
-    mov r0,#USB_MAILBOX_CHANNEL
+    mov r0,#0
     bl mailbox_read
 
-    cmp r0,r4
+    cmp r0,#0x80
     ldreq r0,=POWERING_USB_OK
     ldreq r2,=screen_okColor
     ldrne r0,=POWERING_USB_FAIL
@@ -73,7 +67,7 @@ dec2hex:
     add r0,#'0'
     mov pc,lr
 
-usb_printDevice:
+usb_initHCD:
     push {r4-r8,lr}
 
     mov r0,#32
@@ -157,6 +151,14 @@ usb_printDevice:
     ldr r0,=ENDL_TEXT
     bl screen_print
 
+    ldr r0,=HCD_DISABLING_IRQS_TEXT
+    bl screen_print
+    mov r0,#0
+    str r0,[r4,#0x18]
+    ldr r0,[r4,#0x8]
+    and r0,#0xFFFFFFFE
+    str r0,[r4,#0x8]
+
     mov r0,#4
     bl screen_setTabSize
 
@@ -165,3 +167,58 @@ usb_printDevice:
     .unreq hostConfig
 
     pop {r4-r8,pc}
+
+.section .data
+HCD_START_CORE_TEXT: .asciz "HCD: Start core.\n"
+HCD_MASTER_RESET_TEXT: .asciz "HCD: Master reset.\n"
+
+.section .text
+usb_hcdStart:
+    push {r4,lr}
+    
+    // Set default text color
+    ldr r2,=screen_varForeColor
+	ldr r1,[r2]
+
+    ldr r0,=HCD_START_CORE_TEXT
+    bl screen_print
+    ldr r4,=USB_CORE_ADDR
+    ldr r0,[r4,#0xC] // usb struct
+    and r0,#0xFFAFFFFF // Turn bit 20 and 22 off
+                       // UlpiDriveExternalVbus 
+                       // TsDlinePulseEnable 
+    str r0,[r4,#0xC]
+
+    ldr r0,=HCD_MASTER_RESET_TEXT
+    bl screen_print
+    bl usb_hcdReset
+
+    pop {r4,pc}
+
+usb_hcdReset:
+    push {r4,lr}
+
+    ldr r4,=USB_CORE_ADDR
+
+    hcdResetLoop1$:
+        ldr r0,[r4,#0x10] // Reset
+        and r0,#0x80000000
+        cmp r0,#0 // AhbMasterIdle == false
+        beq hcdResetLoop1$
+
+    ldr r0,[r4,#0x10] // Reset
+    orr r0,#0x1 // CoreSoft = true
+    str r0,[r4,#0x10]
+
+    hcdResetLoop2$:
+        ldr r0,[r4,#0x10] // Reset
+        and r0,#0x80000000
+        cmp r0,#0 // AhbMasterIdle == false
+        beq hcdResetLoop2$
+
+        ldr r0,[r4,#0x10] // Reset
+        and r0,#0x1
+        cmp r0,#1 // CoreSoft == true
+        beq hcdResetLoop2$
+
+    pop {r4,pc}

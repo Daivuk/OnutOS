@@ -369,51 +369,8 @@ screen_printAddr:
     bl screen_printChar
 
     mov r0,r4
-    lsr r0,#28
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
-
-    mov r0,r4
-    lsr r0,#24
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
-
-    mov r0,r4
-    lsr r0,#20
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
-
-    mov r0,r4
-    lsr r0,#16
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
-
-    mov r0,r4
-    lsr r0,#12
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
-
-    mov r0,r4
-    lsr r0,#8
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
-
-    mov r0,r4
-    lsr r0,#4
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
-
-    mov r0,r4
-    and r0,#0xF
-    bl dec2hex
-    bl screen_printChar
+    mov r2,#8
+    bl screen_printHex
 
     pop {r4,pc}
 

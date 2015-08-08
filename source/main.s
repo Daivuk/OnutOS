@@ -38,7 +38,7 @@ main:
     ldr r0,=KERNEL_SIZE_TEXT
     bl screen_print
     ldr r0,=endMarker
-    bl screen_printAddr
+    bl screen_printU32
     ldr r0,=NEW_LINE_TEXT
     bl screen_print
 
