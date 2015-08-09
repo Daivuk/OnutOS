@@ -2,9 +2,9 @@
 #define USB_HOST_ADDR 0x3F980400
 #define USB_POWER_ADDR 0x3F980E00
 
-#define ReceiveFifoSize 20480 /* 16 to 32768 */
-#define NonPeriodicFifoSize 20480 /* 16 to 32768 */
-#define PeriodicFifoSize 20480 /* 16 to 32768 */
+#define ReceiveFifoSize 1024 /* 16 to 32768 */
+#define NonPeriodicFifoSize 1024 /* 16 to 32768 */
+#define PeriodicFifoSize 1024 /* 16 to 32768 */
 
 #define Ulpi 2
 #define Dedicated 1
@@ -726,6 +726,31 @@ usb_clearChannels:
         .unreq channels
         pop {r4-r8,pc}
 
+.section .data
+HCD_POWERING_UP_PORT: .asciz "\tHCD: Powering up port."
+.section .text
+usb_powerUpPort:
+    push {r4,lr}
+
+    ldr r4,=USB_CORE_ADDR
+    ldr r0,[r4,#0x440] // Host.Port
+    and r0,#0x1000 // Power bit
+    cmp r0,#0
+    popne {r4,pc}
+
+    ldr r0,=HCD_POWERING_UP_PORT
+    bl screen_println
+
+    ldr r0,[r4,#0x440] // Host.Port
+    orr r2,r0,#0x1000 // Power bit
+    mov r0,#0x1F000
+    orr r0,#0x140
+    and r2,r0
+    str r2,[r4,#0x440]
+
+    pop {r4,pc}
+
+.section .text
 usb_startHost:
     push {lr}
     
@@ -746,5 +771,6 @@ usb_startHost:
     bl usb_transmitFifoFlush
     bl usb_receiveFifoFlush
     bl usb_clearChannels
+    bl usb_powerUpPort
 
     pop {pc}
