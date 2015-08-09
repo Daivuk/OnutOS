@@ -750,6 +750,39 @@ usb_powerUpPort:
 
     pop {r4,pc}
 
+.section .data
+HCD_RESET_PORT_TEXT: .asciz "\tHCD: Reset port."
+.section .text
+usb_resetPort:
+    push {r4,lr}
+
+    ldr r0,=HCD_RESET_PORT_TEXT
+    bl screen_println
+
+    ldr r4,=USB_CORE_ADDR
+
+    ldr r0,[r4,#0x440] // Host.Port
+    orr r2,r0,#0x100 // Reset = true
+    mov r0,#0x1F000
+    orr r0,#0x140
+    and r2,r0
+    str r2,[r4,#0x440]
+    mov r4,r2
+
+    mov r0,#50176
+    bl time_wait
+
+    mov r0,r4
+    and r2,r0,#0xFFFFFEFF // Reset = false
+    mov r0,#0x1F000
+    orr r0,#0x140
+    and r2,r0
+    str r2,[r4,#0x440]
+
+    pop {r4,pc}
+
+.section .data
+HCD_SUCCESS_TEXT: .asciz "\tHCD: Successfully started."
 .section .text
 usb_startHost:
     push {lr}
@@ -772,5 +805,11 @@ usb_startHost:
     bl usb_receiveFifoFlush
     bl usb_clearChannels
     bl usb_powerUpPort
+    bl usb_resetPort
+
+    ldr r0,=HCD_SUCCESS_TEXT
+    ldr r2,=screen_okColor
+    ldr r1,[r2]
+    bl screen_println
 
     pop {pc}
