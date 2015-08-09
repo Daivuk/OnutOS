@@ -584,7 +584,6 @@ HCD_TXFLUSH_ALL_TEXT: .asciz "\tHCD: TXFlush(All)"
 HCD_TXFLUSH_NP_TEXT: .asciz "\tHCD: TXFlush(NP)"
 HCD_TXFLUSH_P_TEXT1: .asciz "\tHCD: TXFlush(P"
 HCD_TXFLUSH_P_TEXT2: .asciz ")"
-
 .section .text
 usb_transmitFifoFlush:
     push {r4-r5,lr}
@@ -629,6 +628,28 @@ usb_transmitFifoFlush:
 
         pop {r4-r5,pc}
 
+.section .data
+HCD_RX_FLUSH_ALL_TEXT: .asciz "\tHCD: RXFlush(All)"
+.section .text
+usb_receiveFifoFlush:
+    push {r4,lr}
+
+    ldr r0,=HCD_RX_FLUSH_ALL_TEXT
+    bl screen_println
+
+    ldr r4,=USB_CORE_ADDR
+
+    mov r0,#0b1000
+    str r0,[r4,#0x10]
+
+    recvFifoFlushLoop$:
+        ldr r0,[r4,#0x10]
+        and r0,#0b1000
+        cmp r0,#0
+        bne recvFifoFlushLoop$
+
+    pop {r4,pc}
+
 usb_startHost:
     push {lr}
     
@@ -647,5 +668,6 @@ usb_startHost:
     bl usb_enableHNP
     mov r0,#FlushAll
     bl usb_transmitFifoFlush
+    bl usb_receiveFifoFlush
 
     pop {pc}
