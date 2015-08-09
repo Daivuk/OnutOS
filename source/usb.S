@@ -164,6 +164,7 @@ HCD_MASTER_RESET_TEXT: .asciz "\tHCD: Master reset."
 HCD_ONE_TIME_PHY_INIT_TEXT: .asciz "\tHCD: One time phy initialisation."
 HCD_ULPI_FLLS_CONFIG_ENABLED_TEXT: .asciz "\tHCD: ULPI FSLS configuration: enabled."
 HCD_ULPI_FLLS_CONFIG_DISABLED_TEXT: .asciz "\tHCD: ULPI FSLS configuration: disabled."
+HCD_DMA_CONFIG_ENABLED_TEXT: .asciz "\tHCD: DMA configuration: enabled."
 
 .section .text
 usb_hcdReset:
@@ -271,6 +272,21 @@ usb_startCore:
 
     pop {r4,pc}
 
+usb_enableDMAConfig:
+    push {r4-r5,lr}
+    Ahb .req r5
+    
+    ldr r0,=HCD_DMA_CONFIG_ENABLED_TEXT
+    bl screen_println
+
+    ldr Ahb,[r4,#0x8] // Ahb struct
+    orr Ahb,#0b100000 // DmaEnable = true
+    and Ahb,#0xFF7FFFFF // DmaRemainderMode = Incremental
+    str Ahb,[r4,#0x8] // Ahb struct
+
+    .unreq Ahb
+    pop {r4-r5,pc}
+
 usb_hcdStart:
     push {r4,lr}
     
@@ -282,5 +298,6 @@ usb_hcdStart:
     bl usb_hcdReset
     bl usb_phyInit
     bl usb_toggleULPIFSLSConfig
+    bl usb_enableDMAConfig
 
     pop {r4,pc}
