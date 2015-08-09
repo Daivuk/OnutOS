@@ -175,6 +175,7 @@ HCD_DMA_CONFIG_ENABLED_TEXT: .asciz "\tHCD: DMA configuration: enabled."
 HCD_HNP_SRP_CONFIG_TEXT: .asciz "\tHCD: HNP/SRP configuration: HNP, SRP."
 HCD_SRP_CONFIG_TEXT: .asciz "\tHCD: HNP/SRP configuration: SRP."
 HCD_HNP_SRP_CONFIG_NONE_TEXT: .asciz "\tHCD: HNP/SRP configuration: none."
+HCD_INTERFACE_UTMI_PLUS_TEXT: .asciz "\tHCD: Interface: UTMI+."
 
 .section .text
 usb_hcdReset:
@@ -212,6 +213,8 @@ usb_phyInit:
     push {r4,lr}
 
     ldr r0,=HCD_ONE_TIME_PHY_INIT_TEXT
+    bl screen_println
+    ldr r0,=HCD_INTERFACE_UTMI_PLUS_TEXT
     bl screen_println
 
     ldr r4,=USB_CORE_ADDR
