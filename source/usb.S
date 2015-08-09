@@ -20,6 +20,24 @@
 #define Clock48MHz 1
 #define Clock6MHz 2
 
+#define FlushNonPeriodic 0
+#define FlushPeriodic1 1
+#define FlushPeriodic2 2
+#define FlushPeriodic3 3
+#define FlushPeriodic4 4
+#define FlushPeriodic5 5
+#define FlushPeriodic6 6
+#define FlushPeriodic7 7
+#define FlushPeriodic8 8
+#define FlushPeriodic9 9
+#define FlushPeriodic10 10
+#define FlushPeriodic11 11
+#define FlushPeriodic12 12
+#define FlushPeriodic13 13
+#define FlushPeriodic14 14
+#define FlushPeriodic15 15
+#define FlushAll 16
+
 .section .data
 .align 2
 DEVICE_DESC_USB_TEXT: .asciz "USB:"
@@ -522,11 +540,94 @@ usb_printFifo:
     pop {pc}
 
 usb_setupFifo:
-    push {lr}
+    push {r4,lr}
 
     bl usb_printFifo
 
-    pop {pc}
+    ldr r4,=USB_CORE_ADDR
+
+    mov r0,#ReceiveFifoSize
+    str r0,[r4,#0x24] // Core.Receive.Size
+
+    mov r0,#NonPeriodicFifoSize
+    lsl r0,#16
+    orr r0,#ReceiveFifoSize
+    str r0,[r4,#0x28] // Core.NonPeriodicFifo.Size
+
+    mov r0,#PeriodicFifoSize
+    lsl r0,#16
+    orr r0,#ReceiveFifoSize
+    add r0,#NonPeriodicFifoSize
+    str r0,[r4,#0x100] // Core.NonPeriodicFifo.Size
+
+    pop {r4,pc}
+
+.section .data
+HCD_SET_HNP_ENABLED_TEXT: .asciz "\tHCD: Set HNP: enabled."
+
+.section .text
+usb_enableHNP:
+    push {r4,lr}
+
+    ldr r0,=HCD_SET_HNP_ENABLED_TEXT
+    bl screen_println
+
+    ldr r4,=USB_CORE_ADDR
+    ldr r0,[r4,#0x0]
+    orr r0,#0x400
+    str r0,[r4,#0x0]
+
+    pop {r4,pc}
+
+.section .data
+HCD_TXFLUSH_ALL_TEXT: .asciz "\tHCD: TXFlush(All)"
+HCD_TXFLUSH_NP_TEXT: .asciz "\tHCD: TXFlush(NP)"
+HCD_TXFLUSH_P_TEXT1: .asciz "\tHCD: TXFlush(P"
+HCD_TXFLUSH_P_TEXT2: .asciz ")"
+
+.section .text
+usb_transmitFifoFlush:
+    push {r4-r5,lr}
+
+    mov r4,r0
+
+    cmp r4,#FlushAll
+    beq transmitFifoFlushAll$
+    cmp r4,#FlushNonPeriodic
+    beq transmitFifoFlushNonPeriodic$
+
+    ldr r0,=HCD_TXFLUSH_P_TEXT1
+    bl screen_print
+    mov r0,r4
+    bl screen_printU32
+    ldr r0,=HCD_TXFLUSH_P_TEXT2
+    bl screen_println
+    b transmitFifoFlushLogDone$
+
+    transmitFifoFlushAll$:
+        ldr r0,=HCD_TXFLUSH_ALL_TEXT
+        bl screen_println
+        b transmitFifoFlushLogDone$
+
+    transmitFifoFlushNonPeriodic$:
+        ldr r0,=HCD_TXFLUSH_NP_TEXT
+        bl screen_println
+        b transmitFifoFlushLogDone$
+
+    transmitFifoFlushLogDone$:
+        ldr r5,=USB_CORE_ADDR
+        mov r0,r4
+        lsl r0,#6
+        orr r0,#0b100000
+        str r0,[r5,#0x10]
+
+        comfirmTransmitLoop$:
+            ldr r0,[r5,#0x10]
+            and r0,#0b100000
+            cmp r0,#1
+            beq comfirmTransmitLoop$
+
+        pop {r4-r5,pc}
 
 usb_startHost:
     push {lr}
@@ -543,5 +644,8 @@ usb_startHost:
     bl usb_setFslsOnly
     bl usb_dmaDescriptorState
     bl usb_setupFifo
+    bl usb_enableHNP
+    mov r0,#FlushAll
+    bl usb_transmitFifoFlush
 
     pop {pc}
