@@ -655,6 +655,8 @@ usb_receiveFifoFlush:
 
     pop {r4,pc}
 
+.section .data
+HCD_UNABLE_TO_CLEAR_HALT_TEXT: .asciz "\tHCD: Unable to clear halt on channel "
 .section .text
 usb_clearChannels:
     push {r4-r8,lr}
@@ -679,8 +681,6 @@ usb_clearChannels:
     add channels,coreAddr,#0x500
     mov i,HostChannelCount
     usb_clearChannelsLoop1$:        
-        mov r0,#'+'
-        bl screen_printChar
         ldr r0,[channels]
         orr r0,#0x40000000 // Disable = true
         and r0,#0x7FFFFFFF // Enable = false
@@ -690,9 +690,6 @@ usb_clearChannels:
         subs i,#1
         bne usb_clearChannelsLoop1$
 
-    mov r0,#'\n'
-    bl screen_printChar
-
     add channels,coreAddr,#0x500
     mov i,HostChannelCount
     usb_clearChannelsLoop2$:
@@ -700,18 +697,26 @@ usb_clearChannels:
         orr r0,#0xC0000000 // Enable = true, Disable = true
         orr r0,#0x8000 // EndPointDirection = In
         str r0,[channels]
-        mov r0,#'+'
-        bl screen_printChar
+        mov r2,#0x10000
         loopUntilNotEnabled$:
-            mov r0,#'.'
-            bl screen_printChar
-            ldr r0,[channels]
-            and r0,#0x80000000
-            cmp r0,#0
-            bne loopUntilNotEnabled$
-        add channels,#0x20
-        subs i,#1
-        bne usb_clearChannelsLoop2$
+            subs r2,#1
+            beq errorToClear$
+            b continueToClearCheck$
+            errorToClear$:
+                ldr r0,=HCD_UNABLE_TO_CLEAR_HALT_TEXT
+                bl screen_print
+                sub r0,HostChannelCount,i
+                bl screen_printU32ln
+                b breakLoopUnable$
+            continueToClearCheck$:
+                ldr r0,[channels]
+                and r0,#0x80000000
+                cmp r0,#0x80000000
+                beq loopUntilNotEnabled$
+        breakLoopUnable$:
+            add channels,#0x20
+            subs i,#1
+            bne usb_clearChannelsLoop2$
 
     usb_clearChannelsDone$:
         .unreq coreAddr
