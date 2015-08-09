@@ -4,6 +4,13 @@
 
 #define Ulpi 2
 #define Dedicated 1
+#define HNP_SRP_CAPABLE 0
+#define SRP_ONLY_CAPABLE 1
+#define NO_HNP_SRP_CAPABLE 2
+#define SRP_CAPABLE_DEVICE 3
+#define NO_SRP_CAPABLE_DEVICE 4
+#define SRP_CAPABLE_HOST 5
+#define NO_SRP_CAPABLE_HOST 6
 
 .section .data
 .align 2
@@ -165,6 +172,9 @@ HCD_ONE_TIME_PHY_INIT_TEXT: .asciz "\tHCD: One time phy initialisation."
 HCD_ULPI_FLLS_CONFIG_ENABLED_TEXT: .asciz "\tHCD: ULPI FSLS configuration: enabled."
 HCD_ULPI_FLLS_CONFIG_DISABLED_TEXT: .asciz "\tHCD: ULPI FSLS configuration: disabled."
 HCD_DMA_CONFIG_ENABLED_TEXT: .asciz "\tHCD: DMA configuration: enabled."
+HCD_HNP_SRP_CONFIG_TEXT: .asciz "\tHCD: HNP/SRP configuration: HNP, SRP."
+HCD_SRP_CONFIG_TEXT: .asciz "\tHCD: HNP/SRP configuration: SRP."
+HCD_HNP_SRP_CONFIG_NONE_TEXT: .asciz "\tHCD: HNP/SRP configuration: none."
 
 .section .text
 usb_hcdReset:
@@ -287,6 +297,52 @@ usb_enableDMAConfig:
     .unreq Ahb
     pop {r4-r5,pc}
 
+usb_setupHNPSRPConfig:
+    push {r4-r6,lr}
+    coreAddr .req r4
+    usb .req r5
+    OperatingMode .req r6
+
+    ldr coreAddr,=USB_CORE_ADDR
+    ldr usb,[coreAddr,#0xC] // usb struct
+    ldr OperatingMode,[coreAddr,#0x48]
+    and OperatingMode,#0b111
+
+    cmp OperatingMode,#HNP_SRP_CAPABLE
+    beq setHNP_SRP$
+    cmp OperatingMode,#SRP_ONLY_CAPABLE
+    beq setSRP$
+    cmp OperatingMode,#SRP_CAPABLE_DEVICE
+    beq setSRP$
+    cmp OperatingMode,#SRP_CAPABLE_HOST
+    beq setSRP$
+
+    // None
+    ldr r0,=HCD_HNP_SRP_CONFIG_NONE_TEXT
+    bl screen_println
+    and usb,#0xFFFFFCFF
+    b usb_setupHNPSRPConfigDone$
+
+    setHNP_SRP$:
+        ldr r0,=HCD_HNP_SRP_CONFIG_TEXT
+        bl screen_println
+        orr usb,#0x300
+        b usb_setupHNPSRPConfigDone$
+
+    setSRP$:
+        ldr r0,=HCD_SRP_CONFIG_TEXT
+        bl screen_println
+        orr usb,#0x100
+        and usb,#0xFFFFFDFF
+        b usb_setupHNPSRPConfigDone$
+
+    usb_setupHNPSRPConfigDone$:
+        str usb,[coreAddr,#0xC]
+        .unreq coreAddr
+        .unreq usb
+        .unreq OperatingMode
+        pop {r4-r6,pc}
+
 usb_hcdStart:
     push {r4,lr}
     
@@ -299,5 +355,6 @@ usb_hcdStart:
     bl usb_phyInit
     bl usb_toggleULPIFSLSConfig
     bl usb_enableDMAConfig
+    bl usb_setupHNPSRPConfig
 
     pop {r4,pc}
