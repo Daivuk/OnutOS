@@ -437,6 +437,13 @@ usb_setClockRate:
         .unreq HostConfig
         pop {r4-r10,pc}
 
+usb_setFslsOnly:
+    ldr r0,=USB_CORE_ADDR
+    ldr r2,[r0,#0x400]
+    orr r2,#0b100
+    str r2,[r0,#0x400]
+    mov pc,lr
+
 usb_startHost:
     push {lr}
     
@@ -449,5 +456,6 @@ usb_startHost:
 
     bl usb_clearPower
     bl usb_setClockRate
+    bl usb_setFslsOnly
 
     pop {pc}
