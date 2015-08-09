@@ -42,62 +42,62 @@ screen_getFrameBuffer:
 
 .globl screen_getWidth
 screen_getWidth:
-    ldr r1,=screen_varFrameBufferInfo
-    ldr r0,[r1,#8]
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#8]
     mov pc,lr
 
 .globl screen_getHeight
 screen_getHeight:
-    ldr r1,=screen_varFrameBufferInfo
-    ldr r0,[r1,#12]
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#12]
     mov pc,lr
 
 .globl screen_getPitch
 screen_getPitch:
-    ldr r1,=screen_varFrameBufferInfo
-    ldr r0,[r1,#16]
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#16]
     mov pc,lr
 
 .globl screen_getSize
 screen_getSize:
-    ldr r1,=screen_varFrameBufferInfo
-    ldr r0,[r1,#36]
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#36]
     mov pc,lr
 
 .globl screen_getTextCursorX
 screen_getTextCursorX:
-    ldr r1,=screen_textCursorX
-    ldr r0,[r1]
+    ldr r2,=screen_textCursorX
+    ldr r0,[r2]
     mov pc,lr
 
 .globl screen_getTextCursorY
 screen_getTextCursorY:
-    ldr r1,=screen_textCursorY
-    ldr r0,[r1]
+    ldr r2,=screen_textCursorY
+    ldr r0,[r2]
     mov pc,lr
 
 .globl screen_setTextCursorX
 screen_setTextCursorX:
-    ldr r1,=screen_textCursorX
-    str r0,[r1]
+    ldr r2,=screen_textCursorX
+    str r0,[r2]
     mov pc,lr
 
 .globl screen_setTextCursorY
 screen_setTextCursorY:
-    ldr r1,=screen_textCursorY
-    str r0,[r1]
+    ldr r2,=screen_textCursorY
+    str r0,[r2]
     mov pc,lr
 
 .globl screen_getTabSize
 screen_getTabSize:
-    ldr r1,=screen_tabSize
-    ldr r0,[r1]
+    ldr r2,=screen_tabSize
+    ldr r0,[r2]
     mov pc,lr
 
 .globl screen_setTabSize
 screen_setTabSize:
-    ldr r1,=screen_tabSize
-    str r0,[r1]
+    ldr r2,=screen_tabSize
+    str r0,[r2]
     mov pc,lr
 
 .globl screen_init
@@ -137,9 +137,7 @@ screen_clear:
 	ldr r3,=screen_varFrameBufferInfo
 
 	// Calculate size
-	ldr r1,[r3,#8] // Width
-	ldr size,[r3,#12] // Height
-	mul size,r1
+	ldr size,[r3,#36] // Height
 
 	// Get frame buffer address
 	ldr frameBuffer,[r3,#32]
@@ -148,12 +146,12 @@ screen_clear:
 	// Fill the screen (memset)
 	drawPixel$:
 		str colour,[frameBuffer],#4
-		subs size,#1
+		subs size,#4
 		bne drawPixel$
 
 	.unreq colour
 	.unreq frameBuffer
-	.unreq SIZE
+	.unreq size
 
 	mov pc,lr
 
@@ -164,7 +162,13 @@ screen_clear:
 screen_printChar:
 	and r0,#0x7F
 
-	push {r4,r5,r6,r7,r8,lr}
+	push {r4-r8,lr}
+    
+    // Special characters
+	cmp r0,#'\n'
+	beq newLine$
+    cmp r0,#'\t'
+    beq doTab$
 
 	x .req r0
 	y .req r7
@@ -233,53 +237,47 @@ screen_printChar:
 	.unreq colour
 	.unreq yAdvance
 
-	pop {r4,r5,r6,r7,r8,pc}
+	pop {r4-r8,pc}
+    
+	newLine$:
+        mov r0,#0
+        bl screen_setTextCursorX
+        bl screen_getTextCursorY
+		add r0,#16
+        bl screen_setTextCursorY
+		pop {r4-r8,pc}
+
+    doTab$:
+        bl screen_getTabSize
+        mov r4,r0
+        lsl r4,#5
+		bl screen_getTextCursorX
+        udiv r0,r4
+        mul r0,r4
+        add r0,r4
+        bl screen_setTextCursorX
+		pop {r4-r8,pc}
 
 // r0 = null terminated string address
 // r1 = Fore color
+.globl screen_println
+screen_println:
+    push {lr}
+    bl screen_print
+    mov r0,#'\n'
+    bl screen_printChar
+    pop {pc}
 .globl screen_print
 screen_print:
 	push {r4,lr}
 	mov r4,r0
 	loopChars$:
 		ldrb r0,[r4],#1
-		tst r0,#0x7F
+        cmp r0,#0
 		beq endPrint$
-
-		cmp r0,#'\n'
-		beq newLine$
-
-        cmp r0,#'\t'
-        beq doTab$
 
 		bl screen_printChar
 		b loopChars$
-
-		newLine$:
-			ldr r0,=screen_textCursorX
-			mov r2,#0
-			str r2,[r0]
-
-			ldr r0,=screen_textCursorY
-			ldr r2,[r0]
-			add r2,#16
-			str r2,[r0]
-
-			b loopChars$
-
-        doTab$:
-            push {r1}
-            bl screen_getTabSize
-            mov r3,r0
-            lsl r3,#3
-			bl screen_getTextCursorX
-            udiv r0,r3
-            mul r0,r3
-            add r0,r3
-            bl screen_setTextCursorX
-            pop {r1}
-            
-			b loopChars$
 
 	endPrint$:
 		pop {r4,pc}
@@ -287,13 +285,20 @@ screen_print:
 // Print an unsigned int in decimal
 // r0 = Number
 // r1 = Fore color
+.globl screen_printU32ln
+screen_printU32ln:
+    push {lr}
+    bl screen_printU32
+    mov r0,#'\n'
+    bl screen_printChar
+    pop {pc}
 .globl screen_printU32
 screen_printU32:
     cmp r0,#0
     addeq r0,#'0'
     beq screen_printChar
 
-    push {r4,r5,r6,lr}
+    push {r4-r6,lr}
 
     num .req r0
 	modulo .req r3
@@ -327,7 +332,7 @@ screen_printU32:
     devPrint$:
 		// Check if we are done the count
         cmp count,#0
-        popeq {r4,r5,r6,pc}
+        popeq {r4-r6,pc}
 
 		// Calculate modulo
 		udiv modulo,invNum,ten
@@ -359,6 +364,13 @@ dec2hex:
 // Print an hexadecimal address
 // r0 = Address
 // r1 = Fore color
+.globl screen_printAddrln
+screen_printAddrln:
+    push {lr}
+    bl screen_printAddr
+    mov r0,#'\n'
+    bl screen_printChar
+    pop {pc}
 .globl screen_printAddr
 screen_printAddr:
     push {r4,lr}
@@ -377,6 +389,13 @@ screen_printAddr:
 // r0 = number
 // r1 = fore color
 // r2 = count
+.globl screen_printHexln
+screen_printHexln:
+    push {lr}
+    bl screen_printHex
+    mov r0,#'\n'
+    bl screen_printChar
+    pop {pc}
 .globl screen_printHex
 screen_printHex:
     push {r4-r6,lr}
@@ -406,17 +425,16 @@ screen_printHex:
 
 .section .data
 .align 2
-FRAME_BUFFER_TEXT: .ascii    "Frame buffer:\n\0"
-NEW_LINE_TEXT: .ascii "\n\0"
-PHYSICAL_WIDTH_TEXT: .ascii  "    Physical Width  = \0"
-PHYSICAL_HEIGHT_TEXT: .ascii "    Physical Height = \0"
-VIRTUAL_WIDTH_TEXT: .ascii   "Virtual Width   = \0"
-VIRTUAL_HEIGHT_TEXT: .ascii  "Virtual Height  = \0"
-PITCH_TEXT: .ascii           "Pitch       = \0"
-COLOR_DEPTH_TEXT: .ascii     "Color Depth = \0"
-POINTER_TEXT: .ascii         "Address = \0"
-SIZE_TEXT: .ascii            "Size    = \0"
-COMMA_TEXT: .ascii ", \0"
+FRAME_BUFFER_TEXT: .asciz    "Frame buffer:"
+PHYSICAL_WIDTH_TEXT: .asciz  "    Physical Width  = "
+PHYSICAL_HEIGHT_TEXT: .asciz "    Physical Height = "
+VIRTUAL_WIDTH_TEXT: .asciz   "Virtual Width   = "
+VIRTUAL_HEIGHT_TEXT: .asciz  "Virtual Height  = "
+PITCH_TEXT: .asciz           "Pitch       = "
+COLOR_DEPTH_TEXT: .asciz     "Color Depth = "
+POINTER_TEXT: .asciz         "Address = "
+SIZE_TEXT: .asciz            "Size    = "
+COMMA_TEXT: .ascii ", "
 
 .section .text
 .globl screen_printInfo
@@ -428,7 +446,7 @@ screen_printInfo:
     ldr r1,[r2]
 
     ldr r0,=FRAME_BUFFER_TEXT
-    bl screen_print
+    bl screen_println
 
     // Line 1
     ldr r0,=PHYSICAL_WIDTH_TEXT
@@ -463,12 +481,7 @@ screen_printInfo:
     ldr r2,=screen_varFrameBufferInfo
     ldr r0,[r2,#32]
     sub r0,#0xC0000000
-    bl screen_printAddr
-
-    ldr r0,=NEW_LINE_TEXT
-    bl screen_print
-
-
+    bl screen_printAddrln
 
     // Line 2
     ldr r0,=PHYSICAL_HEIGHT_TEXT
@@ -502,10 +515,7 @@ screen_printInfo:
     bl screen_print
     ldr r2,=screen_varFrameBufferInfo
     ldr r0,[r2,#36]
-    bl screen_printU32
-
-    ldr r0,=NEW_LINE_TEXT
-    bl screen_print
+    bl screen_printU32ln
 
 	pop {pc}
 
@@ -517,13 +527,13 @@ screen_printInfo:
 // r4 = color
 .globl screen_drawRect
 screen_drawRect:
+    yAdvance .req r3
+    frameBuffer .req r4
     x1 .req r5
     y1 .req r6
     x2 .req r7
     y2 .req r8
     colour .req r9
-    frameBuffer .req r4
-    yAdvance .req r3
 
     push {r4-r9,lr}
 
@@ -533,7 +543,39 @@ screen_drawRect:
     mov y2,r3
     mov colour,r4
 
-    // Do some validation
+    // Reordering min/max
+    cmp x1,x2
+    movgt r0,x1
+    movgt x1,x2
+    movgt x2,r0
+    addeq x2,#1
+    cmp y1,y2
+    movgt r0,y1
+    movgt y1,y2
+    movgt y2,r0
+    addeq y2,#1
+
+    // Do some clamping to screen
+    cmp x1,#0
+    movlt x1,#0
+    cmp y1,#0
+    movlt y1,#0
+    cmp x2,#0
+    movlt x2,#0
+    cmp y2,#0
+    movlt y2,#0
+    bl screen_getWidth
+    sub r0,#1
+    cmp x1,r0
+    movgt x1,r0
+    cmp x2,r0
+    movgt x2,r0
+    bl screen_getHeight
+    sub r0,#1
+    cmp y1,r0
+    movgt y1,r0
+    cmp y2,r0
+    movgt y2,r0
 
     bl screen_getFrameBuffer
     mov frameBuffer,r0
@@ -571,4 +613,3 @@ screen_drawRect:
     .unreq yAdvance
 
     pop {r4-r9,pc}
-

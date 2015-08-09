@@ -26,21 +26,17 @@ main:
 	ldr r0,=HELLO_WORLD_TEXT
 	ldr r2,=screen_varForeColor
 	ldr r1,[r2]
-	bl screen_print
+	bl screen_println
 
     // Draw entry point address
     ldr r0,=ENTRY_POINT_ADDR_TEXT
     bl screen_print
     ldr r0,=main
-    bl screen_printAddr
-    ldr r0,=NEW_LINE_TEXT
-    bl screen_print
+    bl screen_printAddrln
     ldr r0,=KERNEL_SIZE_TEXT
     bl screen_print
     ldr r0,=endMarker
-    bl screen_printU32
-    ldr r0,=NEW_LINE_TEXT
-    bl screen_print
+    bl screen_printU32ln
 
 	// Print some screen info
 	bl screen_printInfo
@@ -56,10 +52,9 @@ main:
 		b loop$
 		
 .section .data
-HELLO_WORLD_TEXT: .ascii "Oak Nut OS 1.0\n\0"
-ENTRY_POINT_ADDR_TEXT: .ascii "Entry Point at \0"
-KERNEL_SIZE_TEXT: .ascii "Kernel size \0"
-NEW_LINE_TEXT: .ascii "\n\0"
+HELLO_WORLD_TEXT: .asciz "Oak Nut OS 1.0"
+ENTRY_POINT_ADDR_TEXT: .asciz "Entry Point at "
+KERNEL_SIZE_TEXT: .asciz "Kernel size "
 
 .section .end
 .globl endMarker
