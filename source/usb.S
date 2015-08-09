@@ -12,6 +12,10 @@
 #define SRP_CAPABLE_HOST 5
 #define NO_SRP_CAPABLE_HOST 6
 
+#define Clock30_60MHz 0
+#define Clock48MHz 1
+#define Clock6MHz 2
+
 .section .data
 .align 2
 DEVICE_DESC_USB_TEXT: .asciz "USB:"
@@ -40,6 +44,7 @@ usb_init:
     bl screen_println
 
     bl usb_hcdStart
+    bl usb_startHost
 
     pop {pc}
 
@@ -176,6 +181,7 @@ HCD_HNP_SRP_CONFIG_TEXT: .asciz "\tHCD: HNP/SRP configuration: HNP, SRP."
 HCD_SRP_CONFIG_TEXT: .asciz "\tHCD: HNP/SRP configuration: SRP."
 HCD_HNP_SRP_CONFIG_NONE_TEXT: .asciz "\tHCD: HNP/SRP configuration: none."
 HCD_INTERFACE_UTMI_PLUS_TEXT: .asciz "\tHCD: Interface: UTMI+."
+HCD_CORE_STARTED: .asciz "\tHCD: Core started."
 
 .section .text
 usb_hcdReset:
@@ -347,7 +353,7 @@ usb_setupHNPSRPConfig:
         pop {r4-r6,pc}
 
 usb_hcdStart:
-    push {r4,lr}
+    push {lr}
     
     // Set default text color
     ldr r2,=screen_varForeColor
@@ -360,4 +366,88 @@ usb_hcdStart:
     bl usb_enableDMAConfig
     bl usb_setupHNPSRPConfig
 
-    pop {r4,pc}
+    ldr r0,=HCD_CORE_STARTED
+    bl screen_println
+
+    pop {pc}
+
+.section .data
+HCD_STARTING_HOST_TEXT: .asciz "\tHCD: Starting host."
+HCD_HOST_CLOCK_48_TEXT: .asciz "\tHCD: Host clock: 48Mhz."
+HCD_HOST_CLOCK_30_60_TEXT: .asciz "\tHCD: Host clock: 30-60Mhz."
+
+.section .text
+usb_clearPower:
+    ldr r0,=USB_POWER_ADDR
+    mov r2,#0
+    str r2,[r0]
+    mov pc,lr
+
+usb_setClockRate:
+    push {r4-r10,lr}
+    coreAddr .req r4
+    hardware2 .req r5
+    usb .req r6
+    HighSpeedPhysical .req r7
+    FullSpeedPhysical .req r8
+    UlpiFsls .req r9
+    HostConfig .req r10
+
+    ldr coreAddr,=USB_CORE_ADDR
+    ldr usb,[coreAddr,#0xC]
+    ldr hardware2,[coreAddr,#0x48]
+    ldr HostConfig,[coreAddr,#0x400]
+    mov HighSpeedPhysical,hardware2
+    lsr HighSpeedPhysical,#6
+    and HighSpeedPhysical,#0b11
+    mov FullSpeedPhysical,hardware2
+    lsr FullSpeedPhysical,#8
+    and FullSpeedPhysical,#0b11
+    mov UlpiFsls,usb
+    lsr FullSpeedPhysical,#17
+    and UlpiFsls,#0b1
+
+    and HostConfig,#0xFFFFFFFC
+
+    cmp HighSpeedPhysical,#Ulpi
+    bne clock30_60$
+    cmp FullSpeedPhysical,#Dedicated
+    bne clock30_60$
+    cmp UlpiFsls,#1
+    bne clock30_60$
+
+    ldr r0,=HCD_HOST_CLOCK_48_TEXT
+    bl screen_println
+    orr HostConfig,#Clock48MHz
+    b usb_setClockRateDone$
+
+    clock30_60$:
+        ldr r0,=HCD_HOST_CLOCK_30_60_TEXT
+        bl screen_println
+        orr HostConfig,#Clock30_60MHz
+
+    usb_setClockRateDone$:
+        str HostConfig,[coreAddr,#0x400]
+        .unreq coreAddr
+        .unreq hardware2
+        .unreq usb
+        .unreq HighSpeedPhysical
+        .unreq FullSpeedPhysical
+        .unreq UlpiFsls
+        .unreq HostConfig
+        pop {r4-r10,pc}
+
+usb_startHost:
+    push {lr}
+    
+    // Set default text color
+    ldr r2,=screen_varForeColor
+	ldr r1,[r2]
+
+    ldr r0,=HCD_STARTING_HOST_TEXT
+    bl screen_println
+
+    bl usb_clearPower
+    bl usb_setClockRate
+
+    pop {pc}
