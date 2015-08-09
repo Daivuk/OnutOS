@@ -375,6 +375,8 @@ usb_hcdStart:
 HCD_STARTING_HOST_TEXT: .asciz "\tHCD: Starting host."
 HCD_HOST_CLOCK_48_TEXT: .asciz "\tHCD: Host clock: 48Mhz."
 HCD_HOST_CLOCK_30_60_TEXT: .asciz "\tHCD: Host clock: 30-60Mhz."
+HCD_DMA_DESC_ENABLED_TEXT: .asciz "\tHCD: DMA descriptor: enabled."
+HCD_DMA_DESC_DISABLED_TEXT: .asciz "\tHCD: DMA descriptor: disabled."
 
 .section .text
 usb_clearPower:
@@ -444,6 +446,41 @@ usb_setFslsOnly:
     str r2,[r0,#0x400]
     mov pc,lr
 
+usb_dmaDescriptorState:
+    push {lr}
+
+    ldr r0,=USB_CORE_ADDR
+
+    // Host.Config.EnableDmaDescriptor
+    ldr r2,[r0,#0x400]
+    lsr r2,#23
+    and r2,#0b1
+
+    // Core.Hardware.DmaDescription
+    ldr r3,[r0,#0x50]
+    lsr r3,#30
+    and r3,#0b1
+
+    cmp r2,r3
+    bne dmaDescDisabled$
+
+    // Vendor ID
+    ldr r2,[r0,#0x40]
+    and r2,#0xFFF
+    mov r0,#0x900
+    orr r0,#0xA
+    cmp r2,r0
+    blo dmaDescDisabled$
+
+    ldr r0,=HCD_DMA_DESC_ENABLED_TEXT
+    bl screen_println
+    pop {pc}
+
+    dmaDescDisabled$:
+        ldr r0,=HCD_DMA_DESC_DISABLED_TEXT
+        bl screen_println
+        pop {pc}
+
 usb_startHost:
     push {lr}
     
@@ -457,5 +494,6 @@ usb_startHost:
     bl usb_clearPower
     bl usb_setClockRate
     bl usb_setFslsOnly
+    bl usb_dmaDescriptorState
 
     pop {pc}
