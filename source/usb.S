@@ -2,6 +2,9 @@
 #define USB_HOST_ADDR 0x3F980400
 #define USB_POWER_ADDR 0x3F980E00
 
+#define Ulpi 2
+#define Dedicated 1
+
 .section .data
 .align 2
 DEVICE_DESC_USB_TEXT: .asciz "USB:"
@@ -158,32 +161,16 @@ usb_initHCD:
 .section .data
 HCD_START_CORE_TEXT: .asciz "\tHCD: Start core."
 HCD_MASTER_RESET_TEXT: .asciz "\tHCD: Master reset."
+HCD_ONE_TIME_PHY_INIT_TEXT: .asciz "\tHCD: One time phy initialisation."
+HCD_ULPI_FLLS_CONFIG_ENABLED_TEXT: .asciz "\tHCD: ULPI FSLS configuration: enabled."
+HCD_ULPI_FLLS_CONFIG_DISABLED_TEXT: .asciz "\tHCD: ULPI FSLS configuration: disabled."
 
 .section .text
-usb_hcdStart:
+usb_hcdReset:
     push {r4,lr}
-    
-    // Set default text color
-    ldr r2,=screen_varForeColor
-	ldr r1,[r2]
-
-    ldr r0,=HCD_START_CORE_TEXT
-    bl screen_println
-    ldr r4,=USB_CORE_ADDR
-    ldr r0,[r4,#0xC] // usb struct
-    and r0,#0xFFAFFFFF // Turn bit 20 and 22 off
-                       // UlpiDriveExternalVbus 
-                       // TsDlinePulseEnable 
-    str r0,[r4,#0xC]
 
     ldr r0,=HCD_MASTER_RESET_TEXT
     bl screen_println
-    bl usb_hcdReset
-
-    pop {r4,pc}
-
-usb_hcdReset:
-    push {r4,lr}
 
     ldr r4,=USB_CORE_ADDR
 
@@ -207,5 +194,93 @@ usb_hcdReset:
         and r0,#0x1
         cmp r0,#1 // CoreSoft == true
         beq hcdResetLoop2$
+
+    pop {r4,pc}
+
+usb_phyInit:
+    push {r4,lr}
+
+    ldr r0,=HCD_ONE_TIME_PHY_INIT_TEXT
+    bl screen_println
+
+    ldr r4,=USB_CORE_ADDR
+
+    ldr r0,[r4,#0xC] // usb struct
+    orr r0,#0b10000 // ModeSelect = UTMI
+    and r0,#0xFFFFFFF7 // PhyInterface = false
+    str r0,[r4,#0xC]
+
+    bl usb_hcdReset
+
+    pop {r4,pc}
+
+usb_toggleULPIFSLSConfig:
+    push {r4-r6,lr}
+    coreAddr .req r4
+    usb .req r5
+    hardware2 .req r6
+
+    ldr coreAddr,=USB_CORE_ADDR
+    ldr usb,[coreAddr,#0xC]
+    ldr hardware2,[coreAddr,#0x48]
+
+    // Hardware.HighSpeedPhysical == Ulpi
+    mov r0,hardware2
+    lsr r0,#6
+    and r0,#0b11
+    cmp r0,#Ulpi
+    bne ULPIFSLSConfigDisabled$
+
+    // && Hardware.FullSpeedPhysical == Dedicated
+    mov r0,hardware2
+    lsr r0,#8
+    and r0,#0b11
+    cmp r0,#Dedicated
+    bne ULPIFSLSConfigDisabled$
+
+    // Enabled
+    ldr r0,=HCD_ULPI_FLLS_CONFIG_ENABLED_TEXT
+    bl screen_println
+    orr usb,#0xA0000
+    b usb_toggleULPIFSLSConfigDone$
+
+    ULPIFSLSConfigDisabled$:
+        ldr r0,=HCD_ULPI_FLLS_CONFIG_DISABLED_TEXT
+        bl screen_println
+        and usb,#0xFFF5FFFF
+
+    usb_toggleULPIFSLSConfigDone$:
+        str usb,[coreAddr,#0xC]
+        .unreq coreAddr
+        .unreq usb
+        .unreq hardware2
+        pop {r4-r6,pc}
+
+usb_startCore:
+    push {r4,lr}
+
+    ldr r0,=HCD_START_CORE_TEXT
+    bl screen_println
+
+    ldr r4,=USB_CORE_ADDR
+    ldr r0,[r4,#0xC] // usb struct
+    and r0,#0xFFAFFFFF // Turn bit 20 and 22 off
+                       // UlpiDriveExternalVbus 
+                       // TsDlinePulseEnable 
+    str r0,[r4,#0xC]
+
+    pop {r4,pc}
+
+usb_hcdStart:
+    push {r4,lr}
+    
+    // Set default text color
+    ldr r2,=screen_varForeColor
+	ldr r1,[r2]
+
+    bl usb_startCore
+    bl usb_hcdReset
+    bl usb_phyInit
+    bl usb_toggleULPIFSLSConfig
 
     pop {r4,pc}
