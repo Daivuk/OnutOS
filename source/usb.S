@@ -2,6 +2,10 @@
 #define USB_HOST_ADDR 0x3F980400
 #define USB_POWER_ADDR 0x3F980E00
 
+#define ReceiveFifoSize 20480 /* 16 to 32768 */
+#define NonPeriodicFifoSize 20480 /* 16 to 32768 */
+#define PeriodicFifoSize 20480 /* 16 to 32768 */
+
 #define Ulpi 2
 #define Dedicated 1
 #define HNP_SRP_CAPABLE 0
@@ -466,7 +470,9 @@ usb_dmaDescriptorState:
 
     // Vendor ID
     ldr r2,[r0,#0x40]
-    and r2,#0xFFF
+    mov r3,#0xFF0
+    orr r3,#0xF
+    and r2,r3
     mov r0,#0x900
     orr r0,#0xA
     cmp r2,r0
@@ -480,6 +486,47 @@ usb_dmaDescriptorState:
         ldr r0,=HCD_DMA_DESC_DISABLED_TEXT
         bl screen_println
         pop {pc}
+
+.section .data
+HCD_FIFO_CONFIG_TEXT1: .asciz "\tHCD: FIFO configuration: Total="
+HCD_FIFO_CONFIG_TEXT2: .asciz " Rx="
+HCD_FIFO_CONFIG_TEXT3: .asciz " NPTx="
+HCD_FIFO_CONFIG_TEXT4: .asciz " PTx="
+HCD_FIFO_CONFIG_TEXT5: .asciz "."
+
+.section .text
+usb_printFifo:
+    push {lr}
+
+    ldr r0,=HCD_FIFO_CONFIG_TEXT1
+    bl screen_print
+    mov r0,#ReceiveFifoSize
+    add r0,#NonPeriodicFifoSize
+    add r0,#PeriodicFifoSize
+    bl screen_printAddr
+    ldr r0,=HCD_FIFO_CONFIG_TEXT2
+    bl screen_print
+    add r0,#ReceiveFifoSize
+    bl screen_printAddr
+    ldr r0,=HCD_FIFO_CONFIG_TEXT3
+    bl screen_print
+    add r0,#NonPeriodicFifoSize
+    bl screen_printAddr
+    ldr r0,=HCD_FIFO_CONFIG_TEXT4
+    bl screen_print
+    add r0,#PeriodicFifoSize
+    bl screen_printAddr
+    ldr r0,=HCD_FIFO_CONFIG_TEXT5
+    bl screen_println
+
+    pop {pc}
+
+usb_setupFifo:
+    push {lr}
+
+    bl usb_printFifo
+
+    pop {pc}
 
 usb_startHost:
     push {lr}
@@ -495,5 +542,6 @@ usb_startHost:
     bl usb_setClockRate
     bl usb_setFslsOnly
     bl usb_dmaDescriptorState
+    bl usb_setupFifo
 
     pop {pc}
