@@ -38,6 +38,11 @@
 #define FlushPeriodic15 15
 #define FlushAll 16
 
+#define HostToDevice 0
+#define Out 0
+#define DeviceToHost 1
+#define In 1
+
 .section .data
 .align 2
 DEVICE_DESC_USB_TEXT: .asciz "USB:"
@@ -650,6 +655,72 @@ usb_receiveFifoFlush:
 
     pop {r4,pc}
 
+.section .text
+usb_clearChannels:
+    push {r4-r8,lr}
+    coreAddr .req r4
+    EnableDmaDescriptor .req r5
+    HostChannelCount .req r6
+    i .req r7
+    channels .req r8
+
+    ldr coreAddr,=USB_CORE_ADDR
+    ldr EnableDmaDescriptor,[coreAddr,#0x400]
+    lsr EnableDmaDescriptor,#23
+    and EnableDmaDescriptor,#0b1
+
+    cmp EnableDmaDescriptor,#0b1
+    beq usb_clearChannelsDone$
+
+    ldr HostChannelCount,[coreAddr,#0x48]
+    lsr HostChannelCount,#14
+    and HostChannelCount,#0b1111
+
+    add channels,coreAddr,#0x500
+    mov i,HostChannelCount
+    usb_clearChannelsLoop1$:        
+        mov r0,#'+'
+        bl screen_printChar
+        ldr r0,[channels]
+        orr r0,#0x40000000 // Disable = true
+        and r0,#0x7FFFFFFF // Enable = false
+        orr r0,#0x8000 // EndPointDirection = In
+        str r0,[channels]
+        add channels,#0x20
+        subs i,#1
+        bne usb_clearChannelsLoop1$
+
+    mov r0,#'\n'
+    bl screen_printChar
+
+    add channels,coreAddr,#0x500
+    mov i,HostChannelCount
+    usb_clearChannelsLoop2$:
+        ldr r0,[channels]
+        orr r0,#0xC0000000 // Enable = true, Disable = true
+        orr r0,#0x8000 // EndPointDirection = In
+        str r0,[channels]
+        mov r0,#'+'
+        bl screen_printChar
+        loopUntilNotEnabled$:
+            mov r0,#'.'
+            bl screen_printChar
+            ldr r0,[channels]
+            and r0,#0x80000000
+            cmp r0,#0
+            bne loopUntilNotEnabled$
+        add channels,#0x20
+        subs i,#1
+        bne usb_clearChannelsLoop2$
+
+    usb_clearChannelsDone$:
+        .unreq coreAddr
+        .unreq EnableDmaDescriptor
+        .unreq HostChannelCount
+        .unreq i
+        .unreq channels
+        pop {r4-r8,pc}
+
 usb_startHost:
     push {lr}
     
@@ -669,5 +740,6 @@ usb_startHost:
     mov r0,#FlushAll
     bl usb_transmitFifoFlush
     bl usb_receiveFifoFlush
+    bl usb_clearChannels
 
     pop {pc}
