@@ -1072,7 +1072,7 @@ usb_attachDevice:
 
     // Print id info
     ldr address,[pDevice,#UsbDevice_Number]
-    ldr r0,=USBD_SCANNING_TEXT1
+    ldr r0,=USBD_SCANNING_TEXT
     bl screen_print
     mov r0,address
     bl screen_printU32ln

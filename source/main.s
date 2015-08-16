@@ -45,7 +45,9 @@ main:
     bl mem_drawMemUsage
 
     // Initialize USB devices
+#if !defined(EMULATOR_MODE)
     bl usb_init
+#endif
 
 	// Main loop
 	loop$:
