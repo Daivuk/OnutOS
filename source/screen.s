@@ -52,6 +52,12 @@ screen_getHeight:
     ldr r0,[r2,#12]
     mov pc,lr
 
+.globl screen_getColorDepth
+screen_getColorDepth:
+    ldr r2,=screen_varFrameBufferInfo
+    ldr r0,[r2,#20]
+    mov pc,lr
+
 .globl screen_getPitch
 screen_getPitch:
     ldr r2,=screen_varFrameBufferInfo

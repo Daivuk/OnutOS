@@ -17,6 +17,7 @@ main:
 	// Initialize our frame buffer
 	bl screen_init
 
+#if !defined(EMULATOR_MODE)
 	// Clear screen with background color
 	ldr r1,=screen_varBackColor
 	ldr r0,[r1]
@@ -40,14 +41,16 @@ main:
 
 	// Print some screen info
 	bl screen_printInfo
-
+	
     // Print memory info
     bl mem_drawMemUsage
 
     // Initialize USB devices
-#if !defined(EMULATOR_MODE)
     bl usb_init
 #endif
+
+	// Initialize the UI engine
+	bl ui_init
 
 	// Main loop
 	loop$:
