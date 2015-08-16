@@ -45,6 +45,7 @@
 
 .section .data
 .align 2
+UsbDevices: .space 0x5B090
 DEVICE_DESC_USB_TEXT: .asciz "USB:"
 HCD_HARDWARE_TEXT1: .asciz "\tHCD: Hardware: "
 HCD_HARDWARE_TEXT2: .asciz " (BCM"
@@ -72,6 +73,7 @@ usb_init:
 
     bl usb_hcdStart
     bl usb_startHost
+    bl usb_attachRootHub
 
     pop {pc}
 
@@ -813,3 +815,302 @@ usb_startHost:
     bl screen_println
 
     pop {pc}
+
+#define MaxChildrenPerDevice 10
+#define MaxInterfacesPerDevice 8
+#define MaxEndpointsPerDevice 16
+
+#define UsbDevice_Number 0x0 // 4
+#define UsbDevice_Speed 0x4 // 4
+    #define High    0
+    #define Full    1
+    #define Low     2
+#define UsbDevice_Status 0x8 // 4
+    #define Attached    0
+    #define Powered     1
+    #define Default     2
+    #define Addressed   3
+    #define Configured  4
+#define UsbDevice_ConfigurationIndex 0xc // 1
+#define UsbDevice_PortNumber 0x10 // 1
+#define UsbDevice_Error 0x14 // 4
+    #define NoError         0b0
+    #define Stall           0b10
+    #define BufferError     0b100
+    #define Bable           0b1000
+    #define NoAcknowledge   0b10000
+    #define CrcError        0b100000
+    #define BitError        0b1000000
+    #define AhbError        0b10000000
+    #define NotYetError     0b100000000
+    #define Processing      0x80000000
+// Generic device handlers
+// Handler for detaching the device. The device driver should not issue further requests to the device.
+#define UsbDevice_DeviceDetached 0x18 // 4
+// Handler for deallocation of the device. All memory in use by the device driver should be deallocated.
+#define UsbDevice_DeviceDeallocate 0x1c // 4
+// Handler for checking for changes to the USB device tree. Only hubs need handle with this.
+#define UsbDevice_DeviceCheckForChange 0x20 // 4
+// Handler for removing a child device from this device. Only hubs need handle with this.
+#define UsbDevice_DeviceChildDetached 0x24 // 4
+// Handler for reseting a child device of this device. Only hubs need handle with this.
+#define UsbDevice_DeviceChildReset 0x28 // 4
+// Handler for reseting a child device of this device. Only hubs need handle with this.
+#define UsbDevice_DeviceCheckConnection 0x2c // 4
+#define UsbDevice_Descriptor 0x30
+    #define UsbDevice_Descriptor_DescriptorLength 0x30 // 1
+    #define UsbDevice_Descriptor_DescriptorType 0x31 // 1
+        #define Device                  1
+        #define Configuration           2
+        #define String                  3
+        #define Interface               4
+        #define Endpoint                5
+        #define DeviceQualifier         6
+        #define OtherSpeedConfiguration 7
+        #define InterfacePower          8
+        #define Hid                     33
+        #define HidReport               34
+        #define HidPhysical             35
+        #define Hub                     41
+    #define UsbDevice_Descriptor_UsbVersion 0x32 // 2
+    #define UsbDevice_Descriptor_Class 0x34 // 1
+        #define DeviceClassInInterface      0x00
+        #define DeviceClassCommunications   0x2
+        #define DeviceClassHub              0x9
+        #define DeviceClassDiagnostic       0xDC
+        #define DeviceClassMiscellaneous    0xEF
+        #define DeviceClassVendorSpecific   0xFF
+    #define UsbDevice_Descriptor_SubClass 0x35 // 1
+    #define UsbDevice_Descriptor_Protocol 0x36 // 1
+    #define UsbDevice_Descriptor_MaxPacketSize0 0x37 // 1
+    #define UsbDevice_Descriptor_VendorId 0x38 // 2
+    #define UsbDevice_Descriptor_ProductId 0x3A // 2
+    #define UsbDevice_Descriptor_Version 0x3C // 2
+    #define UsbDevice_Descriptor_Manufacturer 0x3E // 1
+    #define UsbDevice_Descriptor_Product 0x3F // 1
+    #define UsbDevice_Descriptor_SerialNumber 0x40 // 1
+    #define UsbDevice_Descriptor_ConfigurationCount 0x41 // 1
+#define UsbDevice_Configuration 0x50
+    #define UsbDevice_Configuration_DescriptorLength 0x50 // 1
+    #define UsbDevice_Configuration_DescriptorType 0x51 // 1
+    #define UsbDevice_Configuration_TotalLength 0x52 // 2
+    #define UsbDevice_Configuration_InterfaceCount 0x54 // 1
+    #define UsbDevice_Configuration_ConfigurationValue 0x55 // 1
+    #define UsbDevice_Configuration_StringIndex 0x56 // 1
+    #define UsbDevice_Configuration_Attributes 0x57 // 1
+        #define UsbDevice_Configuration_Attributes_RemoteWakeupMask 0b100000
+        #define UsbDevice_Configuration_Attributes_SelfPoweredMask 0b1000000
+    #define UsbDevice_Configuration_MaximumPower 0x58 // 1
+#define UsbDevice_Interfaces 0x60
+#define UsbDevice_Endpoints 0xE0
+#define UsbDevice_Parent 0x4E0 // 4
+#define UsbDevice_FullConfiguration 0x4E4 // 4
+#define UsbDevice_DriverData 0x4E8 // 4
+#define UsbDevice_LastTransfer 0x4EC // 4
+#define sizeof_UsbDevice 0x4F0
+
+#define UsbInterfaceDescriptor_DescriptorLength 0x0 // 1
+#define UsbInterfaceDescriptor_DescriptorType 0x1 // 81
+#define UsbInterfaceDescriptor_Number 0x2 // 1
+#define UsbInterfaceDescriptor_AlternateSetting 0x3 // 1
+#define UsbInterfaceDescriptor_EndpointCount 0x4 // 1
+#define UsbInterfaceDescriptor_Class 0x5 // 1
+    #define InterfaceClassReserved              0x0
+    #define InterfaceClassAudio                 0x1
+    #define InterfaceClassCommunications        0x2
+    #define InterfaceClassHid                   0x3
+    #define InterfaceClassPhysical              0x5
+    #define InterfaceClassImage                 0x6
+    #define InterfaceClassPrinter               0x7
+    #define InterfaceClassMassStorage           0x8
+    #define InterfaceClassHub                   0x9
+    #define InterfaceClassCdcData               0xa
+    #define InterfaceClassSmartCard             0xb
+    #define InterfaceClassContentSecurity       0xd
+    #define InterfaceClassVideo                 0xe
+    #define InterfaceClassPersonalHealthcare    0xf
+    #define InterfaceClassAudioVideo            0x10
+    #define InterfaceClassDiagnosticDevice      0xdc
+    #define InterfaceClassWirelessController    0xe0
+    #define InterfaceClassMiscellaneous         0xef
+    #define InterfaceClassApplicationSpecific   0xfe
+    #define InterfaceClassVendorSpecific        0xff
+#define UsbInterfaceDescriptor_SubClass 0x6 // 1
+#define UsbInterfaceDescriptor_Protocol 0x7 // 1
+#define UsbInterfaceDescriptor_StringIndex 0x8 // 1
+
+#define UsbEndpointDescriptor_DescriptorLength 0x0 // 1
+#define UsbEndpointDescriptor_DescriptorType 0x1 // 1
+#define UsbEndpointDescriptor_EndpointAddress 0x2 // 1
+    #define UsbEndpointDescriptor_EndpointAddress_NumberMask 0b1111
+    #define UsbEndpointDescriptor_EndpointAddress_DirectionMask 0b10000000
+#define UsbEndpointDescriptor_Attributes 0x3
+    #define UsbEndpointDescriptor_Attributes_TypeMask 0b11
+    #define UsbEndpointDescriptor_Attributes_SynchronisationMask 0b1100
+        #define UsbEndpointDescriptor_Attributes_Synchronisation_NoSynchronisation 0
+        #define UsbEndpointDescriptor_Attributes_Synchronisation_Asynchronous   0b0100
+        #define UsbEndpointDescriptor_Attributes_Synchronisation_Adaptive       0b1000
+        #define UsbEndpointDescriptor_Attributes_Synchronisation_Synchrouns     0b1100
+    #define UsbEndpointDescriptor_Attributes_UsageMask 0b110000
+        #define UsbEndpointDescriptor_Attributes_Usage_Data                 0
+        #define UsbEndpointDescriptor_Attributes_Usage_Feeback              0b010000
+        #define UsbEndpointDescriptor_Attributes_Usage_ImplicitFeebackData  0b100000
+#define UsbEndpointDescriptor_Packet 0x4 // 2
+    #define UsbEndpointDescriptor_Packet_MaxSizeMask 0b11111111111
+    #define UsbEndpointDescriptor_Packet_TransactionsMask 0b1100000000000
+        #define UsbEndpointDescriptor_Packet_Transactions_None      0
+        #define UsbEndpointDescriptor_Packet_Transactions_Extra1    0b0100000000000
+        #define UsbEndpointDescriptor_Packet_Transactions_Extra2    0b1000000000000
+#define UsbEndpointDescriptor_Interval 0x6 // 1
+
+.section .data
+USB_INIT_DEVICES_TEXT: .asciz "\tUSBD: Initializing for 127 devices."
+.section .text
+usb_initDevices:
+    push {r4-r5,lr}
+
+    ldr r0,=USB_INIT_DEVICES_TEXT
+    bl screen_println
+    
+    deviceId .req r4
+    pDevice .req r5
+    NULL .req r0
+    ldr pDevice,=UsbDevices
+    mov deviceId,#0
+    mov NULL,#0
+    deviceIdLoop$:
+        str NULL,[pDevice,#UsbDevice_Number]
+
+        add pDevice,#sizeof_UsbDevice
+        add deviceId,#1
+        cmp deviceId,#0x7F
+        bne deviceIdLoop$
+
+    .unreq deviceId
+    .unreq pDevice
+    .unreq NULL
+    pop {r4-r5,pc}
+
+.section .data
+.section .text
+usb_allocDevice:
+    push {r4-r5,lr}
+
+    deviceId .req r4
+    pDevice .req r5
+
+    ldr pDevice,=UsbDevices
+    mov deviceId,#1
+
+    deviceIdLoop2$:
+        ldr r0,[pDevice,#UsbDevice_Number] // Number (device ID)
+        cmp r0,#0
+        bne notNULL$
+
+        // We found one. Set his ID
+        str deviceId,[pDevice,#UsbDevice_Number]
+
+        // Mark as attached
+        mov r0,#Attached
+        str r0,[pDevice,#UsbDevice_Status]
+
+        // Set a couple flags to NULL
+        mov r0,#NoError
+        str r0,[pDevice,#UsbDevice_Error]
+        mov r0,#0
+        strb r0,[pDevice,#UsbDevice_PortNumber]
+        str r0,[pDevice,#UsbDevice_Parent]
+        str r0,[pDevice,#UsbDevice_DriverData]
+        str r0,[pDevice,#UsbDevice_FullConfiguration]
+        mov r0,#0xFF
+        strb r0,[pDevice,#UsbDevice_ConfigurationIndex]
+        mov r0,#0
+        str r0,[pDevice,#UsbDevice_DeviceDeallocate]
+        str r0,[pDevice,#UsbDevice_DeviceDetached]
+        str r0,[pDevice,#UsbDevice_DeviceCheckConnection]
+        str r0,[pDevice,#UsbDevice_DeviceCheckForChange]
+        str r0,[pDevice,#UsbDevice_DeviceChildDetached]
+        str r0,[pDevice,#UsbDevice_DeviceChildReset]
+
+        // Return the device pointer
+        mov r0,pDevice
+        b deviceIdLoop2_done$
+
+        notNULL$:
+            add pDevice,#sizeof_UsbDevice
+            add deviceId,#1
+            cmp deviceId,#0x80
+            bne deviceIdLoop2$
+
+    deviceIdLoop2_done$:
+        .unreq deviceId
+        .unreq pDevice
+        pop {r4-r5,pc}
+
+.section .data
+.section .text
+usb_readDeviceDescriptor:
+    push {r4-r5,lr}
+    pDevice .req r4
+    mov pDevice,r0
+
+    .unreq pDevice
+    pop {r4-r5,pc}
+
+.section .data
+USBD_SCANNING_TEXT: .asciz "\tUSBD: Scanning "
+.section .text
+usb_attachDevice:
+    push {r4-r5,lr}
+    pDevice .req r4
+    address .req r5
+    mov pDevice,r0
+
+    // Set default text color
+    ldr r2,=screen_varForeColor
+	ldr r1,[r2]
+
+    // Print id info
+    ldr address,[pDevice,#UsbDevice_Number]
+    ldr r0,=USBD_SCANNING_TEXT1
+    bl screen_print
+    mov r0,address
+    bl screen_printU32ln
+
+    // Read device description
+    mov r0,pDevice
+    bl usb_readDeviceDescriptor
+
+    .unreq pDevice
+    .unreq address
+    pop {r4-r5,pc}
+
+.section .data
+USB_SCANNING_FOR_DEVICES_TEXT: .asciz "\tUSBD: Scanning for devices."
+.section .text
+usb_attachRootHub:
+    push {r4,lr}
+
+    // Set default text color
+    ldr r2,=screen_varForeColor
+	ldr r1,[r2]
+
+    ldr r0,=USB_SCANNING_FOR_DEVICES_TEXT
+    bl screen_println
+
+    // Init devices, put their IDs to 0 (unused)
+    bl usb_initDevices
+
+    // Allocate the root hub
+    bl usb_allocDevice
+    pRootHub .req r4
+    mov pRootHub,r0
+    mov r0,#Powered
+    str r0,[pRootHub,#UsbDevice_Status]
+
+    // Attach the root hub
+    mov r0,pRootHub
+    bl usb_attachDevice
+
+    .unreq pRootHub
+    pop {r4,pc}
