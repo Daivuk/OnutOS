@@ -1,3 +1,6 @@
+#include "ui.h"
+#include "mem.h"
+
 .section .init
 .globl _start
 _start:
@@ -16,6 +19,9 @@ main:
 
 	// Initialize our frame buffer
 	bl screen_init
+
+	// Initialize memory
+	bl mem_init
 
 #if !defined(EMULATOR_MODE)
 	// Clear screen with background color
@@ -51,6 +57,9 @@ main:
 
 	// Initialize the UI engine
 	bl ui_init
+	
+    // Print memory info
+    bl mem_drawMemUsage
 
 	// Main loop
 	loop$:
