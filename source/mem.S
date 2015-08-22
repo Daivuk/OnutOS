@@ -337,6 +337,7 @@ mem_alloc:
 			b mem_alloc_foreachBlock$
 
 	mem_alloc_foreachBlock_done$:
+		mov r0,#0
 		mov pc,lr
 
 	.unreq pNewBlock
