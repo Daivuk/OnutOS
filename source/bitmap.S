@@ -135,6 +135,20 @@ bitmap_blitFull:
 	bl bitmap_blit
 	pop {r4-r7,pc}
 
+.section .text
+bitmap_blitFullTransparent:
+	push {r4-r7,lr}
+	mov r7,r3
+	mov r6,r2
+	mov r3,r1
+	mov r2,r0
+	mov r0,#0
+	mov r1,#0
+	ldr r4,[r6,#BITMAP_width]
+	ldr r5,[r6,#BITMAP_height]
+	bl bitmap_blitTransparent
+	pop {r4-r7,pc}
+
 // Blit a rectangle from a source bitmap to destination bitmap
 // r0 = source X
 // r1 = source Y
@@ -145,7 +159,6 @@ bitmap_blitFull:
 // r6 = source bitmap
 // r7 = destination bitmap
 .section .text
-.globl bitmap_blit
 bitmap_blit:
 	push {r4-r10,lr}
 	srcX .req r0
@@ -159,6 +172,21 @@ bitmap_blit:
 	dstBitmap .req r7
 	srcYAdvance .req r9
 	dstYAdvance .req r10
+	dstWidth .req r8
+	dstHeight .req r8
+
+	// Do some validation and crop the rectangle if necessary
+	ldr dstWidth,[dstBitmap,#BITMAP_width] // Make sure destination X + width < destination width
+	add r9,dstX,width
+	cmp r9,dstWidth
+	subhi r9,dstWidth
+	subhi width,r9
+
+	ldr dstHeight,[dstBitmap,#BITMAP_height]
+	add r9,dstY,height
+	cmp r9,dstHeight
+	subhi r9,dstHeight
+	subhi height,r9
 
 	ldr srcYAdvance,[srcBitmap,#BITMAP_width]
 	sub srcYAdvance,width
@@ -197,6 +225,101 @@ bitmap_blit:
 		bne ui_blit_loopY$
 
 	ui_blit_done$:
+		.unreq dstHeight
+		.unreq dstWidth
+		.unreq srcX
+		.unreq srcY
+		.unreq dstX
+		.unreq dstY
+		.unreq width
+		.unreq height
+		.unreq x
+		.unreq srcBitmap
+		.unreq dstBitmap
+		.unreq srcYAdvance
+		.unreq dstYAdvance
+		pop {r4-r10,pc}
+
+// Blit a rectangle from a source transparent bitmap to destination bitmap
+// r0 = source X
+// r1 = source Y
+// r2 = destination X
+// r3 = destination Y
+// r4 = width
+// r5 = height
+// r6 = source bitmap
+// r7 = destination bitmap
+.section .text
+bitmap_blitTransparent:
+	push {r4-r10,lr}
+	srcX .req r0
+	srcY .req r1
+	dstX .req r2
+	dstY .req r3
+	width .req r4
+	height .req r5
+	x .req r8
+	srcBitmap .req r6
+	dstBitmap .req r7
+	srcYAdvance .req r9
+	dstYAdvance .req r10
+	dstWidth .req r8
+	dstHeight .req r8
+
+	// Do some validation and crop the rectangle if necessary
+	ldr dstWidth,[dstBitmap,#BITMAP_width] // Make sure destination X + width < destination width
+	add r9,dstX,width
+	cmp r9,dstWidth
+	subhi r9,dstWidth
+	subhi width,r9
+
+	ldr dstHeight,[dstBitmap,#BITMAP_height]
+	add r9,dstY,height
+	cmp r9,dstHeight
+	subhi r9,dstHeight
+	subhi height,r9
+
+	ldr srcYAdvance,[srcBitmap,#BITMAP_width]
+	sub srcYAdvance,width
+	lsl srcYAdvance,#2
+
+	ldr dstYAdvance,[dstBitmap,#BITMAP_width]
+	sub dstYAdvance,width
+	lsl dstYAdvance,#2
+
+	ldr r8,[srcBitmap,#BITMAP_width]
+	mul srcY,r8
+	add srcX,srcY
+	lsl srcX,#2
+	ldr srcBitmap,[srcBitmap,#BITMAP_addr]
+	add srcBitmap,srcX
+
+	ldr r8,[dstBitmap,#BITMAP_width]
+	mul dstY,r8
+	add dstX,dstY
+	lsl dstX,#2
+	ldr dstBitmap,[dstBitmap,#BITMAP_addr]
+	add dstBitmap,dstX
+
+	ui_blit_loopYT$:
+		mov x,width
+		ui_blit_loopXT$:
+			ldr r0,[srcBitmap],#4
+			tst r0,#0xFF000000
+			strne r0,[dstBitmap],#4
+			addeq dstBitmap,#4
+
+			subs x,#1
+			bne ui_blit_loopXT$
+
+		add srcBitmap,srcYAdvance
+		add dstBitmap,dstYAdvance
+		subs height,#1
+		bne ui_blit_loopYT$
+
+	ui_blit_doneT$:
+		.unreq dstHeight
+		.unreq dstWidth
 		.unreq srcX
 		.unreq srcY
 		.unreq dstX
@@ -213,7 +336,6 @@ bitmap_blit:
 // r0 = bitmap
 // r1 = color
 .section .text
-.globl bitmap_multColor
 bitmap_multColor:
 	push {r4-r9,lr}
 	ir .req r4

@@ -1,4 +1,5 @@
 #include "mem.h"
+#include "process.h"
 
 .section .data
 MEM_USAGE_TEXT: .asciz "Memory usage    "

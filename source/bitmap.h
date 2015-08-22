@@ -25,6 +25,13 @@
 // r3 = destination bitmap
 .globl bitmap_blitFull
 
+// Put the full source with transparency into destination
+// r0 = destination X
+// r1 = destination Y
+// r2 = Source bitmap with transparency
+// r3 = destination bitmap
+.globl bitmap_blitFullTransparent
+
 // Blit a rectangle from a source bitmap to destination bitmap
 // r0 = source X
 // r1 = source Y
@@ -35,6 +42,17 @@
 // r6 = source bitmap
 // r7 = destination bitmap
 .globl bitmap_blit
+
+// Blit a rectangle from a source transparent bitmap to destination bitmap
+// r0 = source X
+// r1 = source Y
+// r2 = destination X
+// r3 = destination Y
+// r4 = width
+// r5 = height
+// r6 = source bitmap with transparency
+// r7 = destination bitmap
+.globl bitmap_blitTransparent
 
 // r0 = bitmap
 // r1 = color

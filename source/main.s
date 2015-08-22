@@ -60,6 +60,17 @@ main:
 
 	// Main loop
 	loop$:
+		// Check for mouse movement
+#if defined(EMULATOR_MODE)
+		mov r0,#0x60000000
+		ldr r0,[r0]
+		mov r1,r0
+		lsl r1,#16
+		lsr r1,#16
+		lsr r0,#16
+		bl ui_drawCursor
+#endif
+
 		b loop$
 		
 .section .data

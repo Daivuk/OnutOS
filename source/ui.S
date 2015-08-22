@@ -1,6 +1,7 @@
 #include "bitmap.h"
 #include "ui.h"
 #include "mem.h"
+#include "process.h"
 
 #define MAX_WIDTH 1920
 #define MAX_HEIGHT 1080
@@ -17,10 +18,17 @@ DEFAULT_WALLPAPER_1080p_BITMAP:
 WALLPAPER_BITMAP: .space SIZEOF_BITMAP
 MAIN_CONTEXT: .space SIZEOF_BITMAP
 TASK_BAR_BITMAP: .space SIZEOF_BITMAP
+m_cursorBitmap:
+	.int 12
+	.int 19
+	.int 32
+	.int 0
+m_cursorPos: .space 8
 
 .section .data
 .align 2
 DEFAULT_WALLPAPER_RAW: .incbin "wallpaper.raw"
+CURSOR_RAW: .incbin "cursor.raw"
 
 .section .data
 .align 2
@@ -104,4 +112,66 @@ ui_init:
 	ldr r1,=FRAME_BUFFER_BITMAP
 	bl bitmap_copy
 
+	// Load the cursors
+	ldr r0,=m_cursorBitmap
+	ldr r1,=CURSOR_RAW
+	str r1,[r0,#BITMAP_addr]
+
+	// Initialize cursor position to 0,0
+	ldr r1,=m_cursorPos
+	mov r0,#0
+	str r0,[r1,#0]
+	str r0,[r1,#4]
+
 	pop {r4-r7,pc}
+
+.section .text
+ui_drawCursor:
+	push {r4-r9,lr}
+	x .req r8
+	y .req r9
+	mov x,r0
+	mov y,r1
+
+	// Make sure we moved. If the position
+	// is the same, ignore redraw
+	ldr r2,=m_cursorPos;
+	ldr r2,[r2,#0]
+	cmp r0,r2
+	bne ui_drawCursor_draw$
+	ldr r2,=m_cursorPos;
+	ldr r2,[r2,#4]
+	cmp r1,r2
+	beq ui_drawCursor_done$
+
+	ui_drawCursor_draw$:
+		// Erase the cursor area
+		ldr r1,=m_cursorPos;
+		ldr r0,[r1,#0]
+		ldr r1,[r1,#4]
+		mov r2,r0
+		mov r3,r1
+		ldr r5,=m_cursorBitmap
+		ldr r4,[r5,#BITMAP_width]
+		ldr r5,[r5,#BITMAP_height]
+		ldr r6,=MAIN_CONTEXT
+		ldr r7,=FRAME_BUFFER_BITMAP
+		bl bitmap_blit
+
+		// Draw the cursor on the area
+		mov r0,x
+		mov r1,y
+		ldr r2,=m_cursorBitmap
+		ldr r3,=FRAME_BUFFER_BITMAP
+		bl bitmap_blitFullTransparent
+
+		// Update the cursor position to the new one
+		ldr r2,=m_cursorPos;
+		str x,[r2,#0]
+		str y,[r2,#4]
+
+	ui_drawCursor_done$:
+		pop {r4-r9,pc}
+
+	.unreq x
+	.unreq y
