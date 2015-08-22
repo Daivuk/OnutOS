@@ -19,8 +19,8 @@ WALLPAPER_BITMAP: .space SIZEOF_BITMAP
 MAIN_CONTEXT: .space SIZEOF_BITMAP
 TASK_BAR_BITMAP: .space SIZEOF_BITMAP
 m_cursorBitmap:
-	.int 12
-	.int 19
+	.int 20
+	.int 27
 	.int 32
 	.int 0
 m_cursorPos: .space 8
@@ -169,13 +169,6 @@ ui_init:
 	ldr r2,=m_startIconImageBitmap
 	bl ui_buildIcon
 
-	// Draw the icon for test
-	mov r0,#0
-	mov r1,#0
-	ldr r2,=m_startIconBitmap
-	ldr r3,=MAIN_CONTEXT
-	bl bitmap_blitFullAlpha
-
 	// Draw our context to the background
 	ldr r0,=MAIN_CONTEXT
 	ldr r1,=FRAME_BUFFER_BITMAP
@@ -207,6 +200,12 @@ ui_drawCursor:
 		ldr r1,=m_cursorPos;
 		ldr r0,[r1,#0]
 		ldr r1,[r1,#4]
+		cmp r0,#2
+		movlo r0,#2
+		cmp r1,#2
+		movlo r1,#2
+		sub r0,#2
+		sub r1,#2
 		mov r2,r0
 		mov r3,r1
 		ldr r5,=m_cursorBitmap
@@ -219,9 +218,15 @@ ui_drawCursor:
 		// Draw the cursor on the area
 		mov r0,x
 		mov r1,y
+		cmp r0,#2
+		movlo r0,#2
+		cmp r1,#2
+		movlo r1,#2
+		sub r0,#2
+		sub r1,#2
 		ldr r2,=m_cursorBitmap
 		ldr r3,=FRAME_BUFFER_BITMAP
-		bl bitmap_blitFullTransparent
+		bl bitmap_blitFullAlpha
 
 		// Update the cursor position to the new one
 		ldr r2,=m_cursorPos;

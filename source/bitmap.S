@@ -286,17 +286,20 @@ bitmap_copyAlphaAdd:
 		mul srcR,srcA
 		lsr srcR,#8
 		add dstR,srcR
-		and dstR,#0xFF
+		cmp dstR,#0xFF
+		movhi dstR,#0xFF
 
 		mul srcG,srcA
 		lsr srcG,#8
 		add dstG,srcG
-		and dstG,#0xFF
+		cmp dstG,#0xFF
+		movhi dstG,#0xFF
 
 		mul srcB,srcA
 		lsr srcB,#8
 		add dstB,srcB
-		and dstB,#0xFF
+		cmp dstB,#0xFF
+		movhi dstB,#0xFF
 
 		// Recompose destination color
 		lsl r1,dstA,#24
