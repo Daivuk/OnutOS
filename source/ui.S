@@ -1,5 +1,6 @@
 #include "bitmap.h"
 #include "ui.h"
+#include "mem.h"
 
 #define MAX_WIDTH 1920
 #define MAX_HEIGHT 1080
@@ -54,7 +55,7 @@ ui_init:
 	bl screen_getColorDepth
 	str r0,[r4,#BITMAP_bbp]
 	bl screen_getSize
-	mov r1,#1 // Allocate memory for our bitmap
+	mov r1,#PROCESS_KERNEL // Allocate memory for our bitmap
 	bl mem_alloc
 	str r0,[r4,#BITMAP_addr]
 
@@ -75,7 +76,7 @@ ui_init:
 	bl screen_getWidth // Allocate memory for our bitmap
 	mov r1,#TASK_BAR_HEIGHT
 	mul r0,r1
-	lsl r0,#2
+	lsl r0,#PROCESS_KERNEL
 	mov r1,#1
 	bl mem_alloc
 	str r0,[r4,#BITMAP_addr]

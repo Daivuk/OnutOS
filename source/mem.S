@@ -55,7 +55,7 @@ mem_drawMemUsage:
 	// Calculate y1,y2 only once
     bl screen_getTextCursorY    // y1
     mov y1,r0
-    add y2,y1,#62               // y2
+    add y2,y1,#32               // y2
 
 	// Kernel
     ldr r0,=MEM_KERNEL_COLOR
@@ -64,24 +64,6 @@ mem_drawMemUsage:
     bl getRAMToScreen
     mov x1,r0
     ldr r0,=endMarker           // x2
-    bl getRAMToScreen
-    mov x2,r0
-    mov r0,x1
-    mov r1,y1
-    mov r2,x2
-    mov r3,y2
-    bl screen_drawRect
-
-	// Framebuffer
-    ldr r0,=MEM_GPU_COLOR
-    ldr r4,[r0]
-    bl screen_getFrameBuffer    // x1
-    bl getRAMToScreen
-    mov x1,r0
-    bl screen_getFrameBuffer    // x2
-    mov x2,r0
-    bl screen_getSize
-    add r0,x2
     bl getRAMToScreen
     mov x2,r0
     mov r0,x1
@@ -123,6 +105,24 @@ mem_drawMemUsage:
 		b foreachBlock$
 	foreachBlock_done$:
 
+	// Framebuffer
+    ldr r0,=MEM_GPU_COLOR
+    ldr r4,[r0]
+    bl screen_getFrameBuffer    // x1
+    bl getRAMToScreen
+    mov x1,r0
+    bl screen_getFrameBuffer    // x2
+    mov x2,r0
+    bl screen_getSize
+    add r0,x2
+    bl getRAMToScreen
+    mov x2,r0
+    mov r0,x1
+    mov r1,y1
+    mov r2,x2
+    mov r3,y2
+    bl screen_drawRect
+
     // Top line
     ldr r0,=screen_varForeColor
     ldr r4,[r0]
@@ -141,7 +141,7 @@ mem_drawMemUsage:
     // Bottom line
     bl screen_getTextCursorY    // y1
     mov y1,r0
-    add y1,#62
+    add y1,#32
     add y2,y1,#2                // y2
     mov x1,#0                   // x1
     bl screen_getWidth          // x2
@@ -157,7 +157,7 @@ mem_drawMemUsage:
     mov x2,#2                   // x2
     bl screen_getTextCursorY    // y1
     mov y1,r0
-    add y2,y1,#62               // y2
+    add y2,y1,#32               // y2
     mov r0,x1
     mov r1,y1
     mov r2,x2
@@ -172,7 +172,7 @@ mem_drawMemUsage:
     bl screen_getTextCursorY    // y1
     mov y1,r0
     mov y2,y1                   // y2
-    add y2,#62
+    add y2,#32
     mov r0,x1
     mov r1,y1
     mov r2,x2
@@ -187,7 +187,7 @@ mem_drawMemUsage:
 
     // Reset text cursor to new line
     bl screen_getTextCursorY
-    add r0,#64
+    add r0,#34
     bl screen_setTextCursorY
     mov r0,#0
     bl screen_setTextCursorX
@@ -232,24 +232,36 @@ mem_init:
 	ldr r0,=pFirstBlock
 	str pBlock,[r0]
 
-	// Setup the first block
+	// Setup the first empty block
 	mov r0,#0
-	str r0,[pBlock,#MemBlock_processId] // false
+	str r0,[pBlock,#MemBlock_processId] // Unused
 	sub r0,frameBufferAddr,pBlock
-	sub r0,r0,#sizeof_MemBlock
-	str r0,[pBlock,#MemBlock_size] // space between kernel and framebuffer in bytes
+	sub r0,#sizeof_MemBlock
+	sub r0,#sizeof_MemBlock
+	str r0,[pBlock,#MemBlock_size] // space between kernel and framebuffer in bytes - sizeof MemBlock
 	mov r0,#0
 	str r0,[pBlock,#MemBlock_pPrev] // nullptr
-	bl screen_getSize
-	add r0,frameBufferAddr
-	//	mov r0,#0
-	str r0,[pBlock,#MemBlock_pNext] // Should already be aligned properly
+	mov r0,frameBufferAddr
+	sub r0,#sizeof_MemBlock
+	str r0,[pBlock,#MemBlock_pNext]
 
+	// The second block is the GPU area, that we mark as used
+	mov pPrevBlock,pBlock
+	mov pBlock,r0
+	mov r0,#PROCESS_GPU
+	str r0,[pBlock,#MemBlock_processId]
+	bl screen_getSize
+	str r0,[pBlock,#MemBlock_size]
+	add r0,pBlock
+	add r0,#sizeof_MemBlock
+	str r0,[pBlock,#MemBlock_pNext]
+	str pBlock,[r0,#MemBlock_pPrev]
+	
 	// Setup the second block, the one after the framebuffer
 	mov pPrevBlock,pBlock
 	mov pBlock,r0
 	mov r0,#0
-	str r0,[pBlock,#MemBlock_processId] // false
+	str r0,[pBlock,#MemBlock_processId] // Unused
 	bl mem_getTotalSize
 	sub r0,pBlock
 	sub r0,#sizeof_MemBlock
