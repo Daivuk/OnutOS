@@ -97,7 +97,7 @@ mem_drawMemUsage:
 		cmp pBlock,#0
 		beq foreachBlock_done$
 
-		ldr r0,[pBlock,#MemBlock_used]
+		ldr r0,[pBlock,#MemBlock_processId]
 		cmp r0,#0
 		ldrne r0,=MEM_USER_COLOR
 		ldreq r0,=MEM_USER_COLOR_UNUSED
@@ -234,9 +234,9 @@ mem_init:
 
 	// Setup the first block
 	mov r0,#0
-	str r0,[pBlock,#MemBlock_used] // false
+	str r0,[pBlock,#MemBlock_processId] // false
 	sub r0,frameBufferAddr,pBlock
-	sub r0,#sizeof_MemBlock
+	sub r0,r0,#sizeof_MemBlock
 	str r0,[pBlock,#MemBlock_size] // space between kernel and framebuffer in bytes
 	mov r0,#0
 	str r0,[pBlock,#MemBlock_pPrev] // nullptr
@@ -249,7 +249,7 @@ mem_init:
 	mov pPrevBlock,pBlock
 	mov pBlock,r0
 	mov r0,#0
-	str r0,[pBlock,#MemBlock_used] // false
+	str r0,[pBlock,#MemBlock_processId] // false
 	bl mem_getTotalSize
 	sub r0,pBlock
 	sub r0,#sizeof_MemBlock
@@ -262,3 +262,134 @@ mem_init:
 	.unreq pBlock
 	.unreq frameBufferAddr
 	pop {r4-r6,pc}
+
+mem_alloc:
+	requestSize .req r0
+	requestProcessId .req r1
+	nextMinimumSize .req r1
+	pNextBlock .req r1
+	processId .req r2
+	size .req r2
+	pNewBlock .req r2
+	pBlock .req r3
+
+	ldr pBlock,=pFirstBlock
+	ldr pBlock,[pBlock]
+
+	mem_alloc_foreachBlock$:
+		cmp pBlock,#0
+		beq mem_alloc_foreachBlock_done$
+
+		// Check if this block is in used
+		ldr processId,[pBlock,#MemBlock_processId]
+		cmp processId,#0
+		bne mem_alloc_foreachBlock_continue$
+
+		// Check if enough size
+		ldr size,[pBlock,#MemBlock_size]
+		cmp size,requestSize
+		blo mem_alloc_foreachBlock_continue$
+
+		// Use this block
+		str requestProcessId,[pBlock,#MemBlock_processId]
+		mov nextMinimumSize,#sizeof_MemBlock
+		add nextMinimumSize,#1
+		sub size,requestSize
+		cmp size,nextMinimumSize
+		blo mem_alloc_blockFound$
+
+		// Split and create the next block
+		ldr pNextBlock,[pBlock,#MemBlock_pNext]
+		add pNewBlock,pBlock,#sizeof_MemBlock
+		add pNewBlock,requestSize
+		str pNewBlock,[pBlock,#MemBlock_pNext]
+		str pNextBlock,[pNewBlock,#MemBlock_pNext]
+		str pBlock,[pNewBlock,#MemBlock_pPrev]
+		cmp pNextBlock,#0
+		strne pNewBlock,[pNextBlock,#MemBlock_pPrev]
+		mov r1,#0
+		str r1,[pNewBlock,#MemBlock_processId]
+		ldr r1,[pBlock,#MemBlock_size]
+		sub r1,requestSize
+		sub r1,#sizeof_MemBlock
+		str r1,[pNewBlock,#MemBlock_size]
+		str requestSize,[pBlock,#MemBlock_size]
+
+		mem_alloc_blockFound$:
+			mov r0,pBlock
+			add r0,#sizeof_MemBlock
+			mov pc,lr
+
+		mem_alloc_foreachBlock_continue$:
+			ldr pBlock,[pBlock,#MemBlock_pNext]
+			b mem_alloc_foreachBlock$
+
+	mem_alloc_foreachBlock_done$:
+		mov pc,lr
+
+	.unreq pNewBlock
+	.unreq requestSize
+	.unreq requestProcessId
+	.unreq nextMinimumSize
+	.unreq pNextBlock
+	.unreq pBlock
+	.unreq processId
+	.unreq size
+
+mem_free:
+	pBlock .req r0
+	processId .req r1
+	size .req r1
+	pPrevBlock .req r2
+	nextSize .req r2
+	pNextBlock .req r3
+	prevSize .req r3
+
+	sub pBlock,#sizeof_MemBlock
+	mov r1,#0
+	str r1,[pBlock,#MemBlock_processId]
+
+	// Can we merge with previous block?
+	ldr pPrevBlock,[pBlock,#MemBlock_pPrev]
+	cmp pPrevBlock,#0
+	beq mem_free_dontMergePrev$ // pPrev is NULL
+	ldr processId,[pPrevBlock,#MemBlock_processId]
+	cmp processId,#0
+	bne mem_free_dontMergePrev$ // pPrev is not free
+	ldr prevSize,[pPrevBlock,#MemBlock_size]
+	ldr size,[pBlock,#MemBlock_size]
+	add size,#sizeof_MemBlock
+	add prevSize,size
+	str prevSize,[pPrevBlock,#MemBlock_size]
+	ldr pNextBlock,[pBlock,#MemBlock_pNext]
+	str pNextBlock,[pPrevBlock,#MemBlock_pNext]
+	cmp pNextBlock,#1
+	strne pPrevBlock,[pNextBlock,#MemBlock_pPrev]
+	mov pBlock,pPrevBlock
+
+	mem_free_dontMergePrev$:
+	// Can we merge with next block?
+	ldr pNextBlock,[pBlock,#MemBlock_pNext]
+	cmp pNextBlock,#0
+	moveq pc,lr // pNext is NULL
+	ldr processId,[pNextBlock,#MemBlock_processId]
+	cmp processId,#0
+	movne pc,lr // pNext is not free
+	ldr nextSize,[pNextBlock,#MemBlock_size]
+	ldr size,[pBlock,#MemBlock_size]
+	add size,#sizeof_MemBlock
+	add size,nextSize
+	str size,[pBlock,#MemBlock_size]
+	ldr pNextBlock,[pNextBlock,#MemBlock_pNext]
+	str pNextBlock,[pBlock,#MemBlock_pNext]
+	cmp pNextBlock,#0
+	strne pBlock,[pNextBlock,#MemBlock_pPrev]
+
+	mov pc,lr
+	.unreq pBlock
+	.unreq processId
+	.unreq pPrevBlock
+	.unreq pNextBlock
+	.unreq size
+	.unreq prevSize
+	.unreq nextSize

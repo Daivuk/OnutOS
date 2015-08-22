@@ -20,10 +20,6 @@ TASK_BAR_BITMAP: .space SIZEOF_BITMAP
 .section .data
 .align 2
 DEFAULT_WALLPAPER_RAW: .incbin "wallpaper.raw"
-.align 2
-MAIN_CONTEXT_DATA: .space MAX_WIDTH * MAX_HEIGHT * 4 // Reserve the max space for our context
-.align 2
-MAIN_CONTEXT_TASK_BAR_DATA: .space MAX_WIDTH * TASK_BAR_HEIGHT * 4 // Resource the space at the bottom for the darker task bar area
 
 .section .data
 .align 2
@@ -57,7 +53,9 @@ ui_init:
 	str r0,[r4,#BITMAP_height]
 	bl screen_getColorDepth
 	str r0,[r4,#BITMAP_bbp]
-	ldr r0,=MAIN_CONTEXT_DATA
+	bl screen_getSize
+	mov r1,#1 // Allocate memory for our bitmap
+	bl mem_alloc
 	str r0,[r4,#BITMAP_addr]
 
 	// Resize our default wallpaper to match our context
@@ -73,7 +71,13 @@ ui_init:
 	str r0,[r4,#BITMAP_height]
 	mov r0,#32
 	str r0,[r4,#BITMAP_bbp]
-	ldr r0,=MAIN_CONTEXT_TASK_BAR_DATA
+
+	bl screen_getWidth // Allocate memory for our bitmap
+	mov r1,#TASK_BAR_HEIGHT
+	mul r0,r1
+	lsl r0,#2
+	mov r1,#1
+	bl mem_alloc
 	str r0,[r4,#BITMAP_addr]
 
 	// Blit part of the main background to the task bar

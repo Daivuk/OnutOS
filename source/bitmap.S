@@ -226,7 +226,7 @@ bitmap_multColor:
 	size .req r2
 
 	ldr size,[bitmap,#BITMAP_width]
-	ldr r3,[bitmap,#BITMAP_width]
+	ldr r3,[bitmap,#BITMAP_height]
 	mul size,r3
 
 	ldr bitmap,[bitmap,#BITMAP_addr]
@@ -274,7 +274,7 @@ bitmap_multColor:
 
 		subs size,#1
 		bne ui_bitmapMultColor_loop$
-
+		
 	.unreq ir
 	.unreq ig
 	.unreq ib
