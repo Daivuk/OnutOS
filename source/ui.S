@@ -24,15 +24,45 @@ m_cursorBitmap:
 	.int 32
 	.int 0
 m_cursorPos: .space 8
+m_startIconBitmap:
+	.int 32
+	.int 32
+	.int 32
+	.int 0
+m_iconMaskBitmap:
+	.int 32
+	.int 32
+	.int 32
+	.int 0
+m_iconShadowBitmap:
+	.int 32
+	.int 32
+	.int 32
+	.int 0
+m_iconHighlightBitmap:
+	.int 32
+	.int 32
+	.int 32
+	.int 0
+m_startIconImageBitmap:
+	.int 32
+	.int 32
+	.int 32
+	.int 0
 
 .section .data
 .align 2
 DEFAULT_WALLPAPER_RAW: .incbin "wallpaper.raw"
 CURSOR_RAW: .incbin "cursor.raw"
+ICON_MASK_RAW: .incbin "iconMask.raw"
+ICON_SHADOW_RAW: .incbin "iconShadow.raw"
+ICON_HIGHLIGHT_RAW: .incbin "iconHighlight.raw"
+ICON_START_RAW: .incbin "iconStart.raw"
 
 .section .data
 .align 2
 TASK_BAR_COLOR: .int 0xFF7F7F7F
+START_ICON_COLOR: .int 0xFF8E335B
 
 .section .text
 ui_init:
@@ -107,11 +137,6 @@ ui_init:
 	ldr r1,[r1]
 	bl bitmap_multColor
 
-	// Draw our context to the background
-	ldr r0,=MAIN_CONTEXT
-	ldr r1,=FRAME_BUFFER_BITMAP
-	bl bitmap_copy
-
 	// Load the cursors
 	ldr r0,=m_cursorBitmap
 	ldr r1,=CURSOR_RAW
@@ -122,6 +147,39 @@ ui_init:
 	mov r0,#0
 	str r0,[r1,#0]
 	str r0,[r1,#4]
+
+	// Initialize system icons bitmaps
+	ldr r0,=m_iconMaskBitmap
+	ldr r1,=ICON_MASK_RAW
+	str r1,[r0,#BITMAP_addr]
+	ldr r0,=m_iconShadowBitmap
+	ldr r1,=ICON_SHADOW_RAW
+	str r1,[r0,#BITMAP_addr]
+	ldr r0,=m_iconHighlightBitmap
+	ldr r1,=ICON_HIGHLIGHT_RAW
+	str r1,[r0,#BITMAP_addr]
+	ldr r0,=m_startIconImageBitmap
+	ldr r1,=ICON_START_RAW
+	str r1,[r0,#BITMAP_addr]
+
+	// The start menu icon
+	ldr r0,=m_startIconBitmap
+	ldr r1,=START_ICON_COLOR
+	ldr r1,[r1]
+	ldr r2,=m_startIconImageBitmap
+	bl ui_buildIcon
+
+	// Draw the icon for test
+	mov r0,#0
+	mov r1,#0
+	ldr r2,=m_startIconBitmap
+	ldr r3,=MAIN_CONTEXT
+	bl bitmap_blitFullAlpha
+
+	// Draw our context to the background
+	ldr r0,=MAIN_CONTEXT
+	ldr r1,=FRAME_BUFFER_BITMAP
+	bl bitmap_copy
 
 	pop {r4-r7,pc}
 
@@ -175,3 +233,52 @@ ui_drawCursor:
 
 	.unreq x
 	.unreq y
+
+// Build an Oak Nut icon
+// r0 = destination bitmap
+// r1 = icon color
+// r2 = icons image bitmap
+.section .text
+ui_buildIcon:
+	push {r4-r6,lr}
+	dstBitmap .req r4
+	color .req r5
+	image .req r6
+	mov dstBitmap,r0
+	mov color,r1
+	mov image,r2
+
+	mov r0,#0x1000
+	mov r1,#PROCESS_KERNEL
+	bl mem_alloc
+	str r0,[dstBitmap,#BITMAP_addr]
+
+	// Fill with color
+	mov r0,dstBitmap
+	mov r1,color
+	bl bitmap_fill
+
+	// Draw the icon on top of the solid color
+	mov r0,image
+	mov r1,dstBitmap
+	bl bitmap_copyAlpha
+
+	// Overlay the shadow using alpha
+	ldr r0,=m_iconShadowBitmap
+	mov r1,dstBitmap
+	bl bitmap_copyAlpha
+
+	// Overlay the highlights
+	ldr r0,=m_iconHighlightBitmap
+	mov r1,dstBitmap
+	bl bitmap_copyAlphaAdd
+
+	// Mask out the rest
+	ldr r0,=m_iconMaskBitmap
+	mov r1,dstBitmap
+	bl bitmap_mask
+
+	.unreq dstBitmap
+	.unreq color
+	.unreq image
+	pop {r4-r6,pc}

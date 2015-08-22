@@ -1,7 +1,6 @@
 #include "bitmap.h"
 
 .section .text
-.globl bitmap_copy
 // Do a plain copy from a bitmap to another one.
 // Destination bitmap must be of same dimensions are source
 // r0 = Source bitmap
@@ -46,7 +45,287 @@ bitmap_copy:
 		pop {r4-r6,pc}
 
 .section .text
-.globl bitmap_resize
+// Do a plain copy from a bitmap to another one, but alpha blend
+// Destination bitmap must be of same dimensions are source
+// r0 = Source bitmap
+// r1 = Destination bitmap
+bitmap_copyAlpha:
+	push {r4-r12,lr}
+	srcBitmap .req r4
+	dstBitmap .req r5
+	size .req r6
+	srcR .req r7
+	srcG .req r8
+	srcB .req r9
+	srcA .req r10
+	dstR .req r2
+	dstG .req r3
+	dstB .req r11
+	dstA .req r12
+	mov srcBitmap,r0
+	mov dstBitmap,r1
+	
+	// Make sure they are exactly of same dimensions and bit depth
+	ldr r0,[srcBitmap,#BITMAP_height]
+	ldr r1,[dstBitmap,#BITMAP_height]
+	cmp r0,r1
+	bne ui_bitmapCopy_done$
+	ldr r0,[srcBitmap,#BITMAP_bbp]
+	ldr r1,[dstBitmap,#BITMAP_bbp]
+	cmp r0,r1
+	bne ui_bitmapCopy_done$
+	ldr r0,[srcBitmap,#BITMAP_width]
+	ldr r1,[dstBitmap,#BITMAP_width]
+	cmp r0,r1
+	bne ui_bitmapCopy_done$
+	
+	ldr r1,[dstBitmap,#BITMAP_height]
+	mul size,r0,r1
+	ldr srcBitmap,[srcBitmap,#BITMAP_addr]
+	ldr dstBitmap,[dstBitmap,#BITMAP_addr]
+	bitmap_copyAlpha_loop$:
+		// Load source and destination color
+		ldr r0,[srcBitmap],#4
+		ldr r1,[dstBitmap]
+
+		// Decompose source
+		and srcB,r0,#0xFF
+		lsr r0,#8
+		and srcG,r0,#0xFF
+		lsr r0,#8
+		and srcR,r0,#0xFF
+		lsr srcA,r0,#8
+
+		// Decompose destination
+		and dstB,r1,#0xFF
+		lsr r1,#8
+		and dstG,r1,#0xFF
+		lsr r1,#8
+		and dstR,r1,#0xFF
+		lsr dstA,r1,#8
+
+		// Do the maths
+		mul srcR,srcA
+		mov r0,#0xFF
+		sub r0,srcA
+		mul dstR,r0
+		add dstR,srcR
+		lsr dstR,#8
+
+		mul srcG,srcA
+		mov r0,#0xFF
+		sub r0,srcA
+		mul dstG,r0
+		add dstG,srcG
+		lsr dstG,#8
+
+		mul srcB,srcA
+		mov r0,#0xFF
+		sub r0,srcA
+		mul dstB,r0
+		add dstB,srcB
+		lsr dstB,#8
+
+		// Recompose destination color
+		lsl r1,dstA,#24
+		lsl dstR,#16
+		orr r1,dstR
+		lsl dstG,#8
+		orr r1,dstG
+		orr r1,dstB
+
+		// Store result
+		str r1,[dstBitmap],#4
+		subs size,#1
+		bne bitmap_copyAlpha_loop$
+
+	ui_copyAlpha_done$:
+		.unreq srcBitmap
+		.unreq dstBitmap
+		.unreq size
+		.unreq srcA
+		.unreq srcR
+		.unreq srcG
+		.unreq srcB
+		.unreq dstA
+		.unreq dstR
+		.unreq dstG
+		.unreq dstB
+		pop {r4-r12,pc}
+
+.section .text
+bitmap_alphaBlendPixel:
+	push {r4-r8,lr}
+	srcA .req r0
+	srcR .req r4
+	srcG .req r2
+	srcB .req r3
+	dstA .req r1
+	dstR .req r5
+	dstG .req r6
+	dstB .req r7
+
+	// Decompose source
+	and srcB,r0,#0xFF
+	lsr r0,#8
+	and srcG,r0,#0xFF
+	lsr r0,#8
+	and srcR,r0,#0xFF
+	lsr srcA,r0,#8
+
+	// Decompose destination
+	and dstB,r1,#0xFF
+	lsr r1,#8
+	and dstG,r1,#0xFF
+	lsr r1,#8
+	and dstR,r1,#0xFF
+	lsr dstA,r1,#8
+
+	// Do the maths
+	mul srcR,srcA
+	mov r8,#0xFF
+	sub r8,srcA
+	mul dstR,r8
+	add dstR,srcR
+	lsr dstR,#8
+
+	mul srcG,srcA
+	mov r8,#0xFF
+	sub r8,srcA
+	mul dstG,r8
+	add dstG,srcG
+	lsr dstG,#8
+
+	mul srcB,srcA
+	mov r8,#0xFF
+	sub r8,srcA
+	mul dstB,r8
+	add dstB,srcB
+	lsr dstB,#8
+
+	// Recompose destination color
+	lsl r0,dstA,#24
+	lsl dstR,#16
+	orr r0,dstR
+	lsl dstG,#8
+	orr r0,dstG
+	orr r0,dstB
+
+	.unreq srcR
+	.unreq srcG
+	.unreq srcB
+	.unreq srcA
+	.unreq dstR
+	.unreq dstG
+	.unreq dstB
+	.unreq dstA
+
+	pop {r4-r8,pc}
+
+.section .text
+// Do a plain copy from a bitmap to another one, but alpha blend additive
+// Destination bitmap must be of same dimensions are source
+// r0 = Source bitmap
+// r1 = Destination bitmap
+bitmap_copyAlphaAdd:
+	push {r4-r12,lr}
+	srcBitmap .req r4
+	dstBitmap .req r5
+	size .req r6
+	srcR .req r7
+	srcG .req r8
+	srcB .req r9
+	srcA .req r10
+	dstR .req r2
+	dstG .req r3
+	dstB .req r11
+	dstA .req r12
+	mov srcBitmap,r0
+	mov dstBitmap,r1
+	
+	// Make sure they are exactly of same dimensions and bit depth
+	ldr r0,[srcBitmap,#BITMAP_height]
+	ldr r1,[dstBitmap,#BITMAP_height]
+	cmp r0,r1
+	bne ui_bitmapCopy_done$
+	ldr r0,[srcBitmap,#BITMAP_bbp]
+	ldr r1,[dstBitmap,#BITMAP_bbp]
+	cmp r0,r1
+	bne ui_bitmapCopy_done$
+	ldr r0,[srcBitmap,#BITMAP_width]
+	ldr r1,[dstBitmap,#BITMAP_width]
+	cmp r0,r1
+	bne ui_bitmapCopy_done$
+	
+	ldr r1,[dstBitmap,#BITMAP_height]
+	mul size,r0,r1
+	ldr srcBitmap,[srcBitmap,#BITMAP_addr]
+	ldr dstBitmap,[dstBitmap,#BITMAP_addr]
+	bitmap_copyAlphaAdd_loop$:
+		// Load source and destination color
+		ldr r0,[srcBitmap],#4
+		ldr r1,[dstBitmap]
+
+		// Decompose source
+		and srcB,r0,#0xFF
+		lsr r0,#8
+		and srcG,r0,#0xFF
+		lsr r0,#8
+		and srcR,r0,#0xFF
+		lsr srcA,r0,#8
+
+		// Decompose destination
+		and dstB,r1,#0xFF
+		lsr r1,#8
+		and dstG,r1,#0xFF
+		lsr r1,#8
+		and dstR,r1,#0xFF
+		lsr dstA,r1,#8
+
+		// Do the maths
+		mul srcR,srcA
+		lsr srcR,#8
+		add dstR,srcR
+		and dstR,#0xFF
+
+		mul srcG,srcA
+		lsr srcG,#8
+		add dstG,srcG
+		and dstG,#0xFF
+
+		mul srcB,srcA
+		lsr srcB,#8
+		add dstB,srcB
+		and dstB,#0xFF
+
+		// Recompose destination color
+		lsl r1,dstA,#24
+		lsl dstR,#16
+		orr r1,dstR
+		lsl dstG,#8
+		orr r1,dstG
+		orr r1,dstB
+
+		// Store result
+		str r1,[dstBitmap],#4
+		subs size,#1
+		bne bitmap_copyAlphaAdd_loop$
+
+	bitmap_copyAlphaAdd_done$:
+		.unreq srcBitmap
+		.unreq dstBitmap
+		.unreq size
+		.unreq srcA
+		.unreq srcR
+		.unreq srcG
+		.unreq srcB
+		.unreq dstA
+		.unreq dstR
+		.unreq dstG
+		.unreq dstB
+		pop {r4-r12,pc}
+
+.section .text
 // Resize source bitmap to fit into destination bitmap.
 // Both bitmap must match the same bit depth
 // r0 = Source bitmap
@@ -133,6 +412,21 @@ bitmap_blitFull:
 	ldr r4,[r6,#BITMAP_width]
 	ldr r5,[r6,#BITMAP_height]
 	bl bitmap_blit
+	pop {r4-r7,pc}
+
+.section .text
+.globl bitmap_blitFullAlpha
+bitmap_blitFullAlpha:
+	push {r4-r7,lr}
+	mov r7,r3
+	mov r6,r2
+	mov r3,r1
+	mov r2,r0
+	mov r0,#0
+	mov r1,#0
+	ldr r4,[r6,#BITMAP_width]
+	ldr r5,[r6,#BITMAP_height]
+	bl bitmap_blitAlpha
 	pop {r4-r7,pc}
 
 .section .text
@@ -225,6 +519,98 @@ bitmap_blit:
 		bne ui_blit_loopY$
 
 	ui_blit_done$:
+		.unreq dstHeight
+		.unreq dstWidth
+		.unreq srcX
+		.unreq srcY
+		.unreq dstX
+		.unreq dstY
+		.unreq width
+		.unreq height
+		.unreq x
+		.unreq srcBitmap
+		.unreq dstBitmap
+		.unreq srcYAdvance
+		.unreq dstYAdvance
+		pop {r4-r10,pc}
+
+// Blit a rectangle from a source bitmap to destination bitmap
+// r0 = source X
+// r1 = source Y
+// r2 = destination X
+// r3 = destination Y
+// r4 = width
+// r5 = height
+// r6 = source bitmap
+// r7 = destination bitmap
+.section .text
+bitmap_blitAlpha:
+	push {r4-r10,lr}
+	srcX .req r0
+	srcY .req r1
+	dstX .req r2
+	dstY .req r3
+	width .req r4
+	height .req r5
+	x .req r8
+	srcBitmap .req r6
+	dstBitmap .req r7
+	srcYAdvance .req r9
+	dstYAdvance .req r10
+	dstWidth .req r8
+	dstHeight .req r8
+
+	// Do some validation and crop the rectangle if necessary
+	ldr dstWidth,[dstBitmap,#BITMAP_width] // Make sure destination X + width < destination width
+	add r9,dstX,width
+	cmp r9,dstWidth
+	subhi r9,dstWidth
+	subhi width,r9
+
+	ldr dstHeight,[dstBitmap,#BITMAP_height]
+	add r9,dstY,height
+	cmp r9,dstHeight
+	subhi r9,dstHeight
+	subhi height,r9
+
+	ldr srcYAdvance,[srcBitmap,#BITMAP_width]
+	sub srcYAdvance,width
+	lsl srcYAdvance,#2
+
+	ldr dstYAdvance,[dstBitmap,#BITMAP_width]
+	sub dstYAdvance,width
+	lsl dstYAdvance,#2
+
+	ldr r8,[srcBitmap,#BITMAP_width]
+	mul srcY,r8
+	add srcX,srcY
+	lsl srcX,#2
+	ldr srcBitmap,[srcBitmap,#BITMAP_addr]
+	add srcBitmap,srcX
+
+	ldr r8,[dstBitmap,#BITMAP_width]
+	mul dstY,r8
+	add dstX,dstY
+	lsl dstX,#2
+	ldr dstBitmap,[dstBitmap,#BITMAP_addr]
+	add dstBitmap,dstX
+
+	ui_blit_loopY_alpha$:
+		mov x,width
+		ui_blit_loopX_alpha$:
+			ldr r0,[srcBitmap],#4
+			ldr r1,[dstBitmap]
+			bl bitmap_alphaBlendPixel
+			str r0,[dstBitmap],#4
+			subs x,#1
+			bne ui_blit_loopX_alpha$
+
+		add srcBitmap,srcYAdvance
+		add dstBitmap,dstYAdvance
+		subs height,#1
+		bne ui_blit_loopY_alpha$
+
+	ui_blit_done_alpha$:
 		.unreq dstHeight
 		.unreq dstWidth
 		.unreq srcX
@@ -406,3 +792,57 @@ bitmap_multColor:
 	.unreq size
 	.unreq bitmap
 	pop {r4-r9,pc}
+
+// r0 = bitmap
+// r1 = color
+.section .text
+bitmap_fill:
+	bitmap .req r0
+	color .req r1
+	size .req r2
+
+	ldr size,[bitmap,#BITMAP_width]
+	ldr r3,[bitmap,#BITMAP_height]
+	mul size,r3
+
+	ldr bitmap,[bitmap,#BITMAP_addr]
+
+	bitmap_fill_loop$:
+		str color,[bitmap],#4
+		subs size,#1
+		bne bitmap_fill_loop$
+		
+	.unreq color
+	.unreq size
+	.unreq bitmap
+	mov pc,lr
+
+.section .text
+bitmap_mask:
+	push {r4,lr}
+
+	mask .req r0
+	bitmap .req r1
+	size .req r2
+
+	ldr size,[mask,#BITMAP_width]
+	ldr r3,[mask,#BITMAP_height]
+	mul size,r3
+
+	ldr mask,[mask,#BITMAP_addr]
+	ldr bitmap,[bitmap,#BITMAP_addr]
+
+	bitmap_mask_loop$:
+		ldr r3,[mask],#4
+		and r3,#0xFF000000
+		ldr r4,[bitmap]
+		and r4,#0x00FFFFFF
+		orr r4,r3
+		str r4,[bitmap],#4
+		subs size,#1
+		bne bitmap_mask_loop$
+
+	.unreq mask
+	.unreq bitmap
+	.unreq size
+	pop {r4,pc}
