@@ -58,6 +58,8 @@ main:
 	// Initialize the UI engine
 	bl ui_init
 
+	bl mem_drawMemUsage
+
 	// Main loop
 	loop$:
 		// Check for mouse movement

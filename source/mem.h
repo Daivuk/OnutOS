@@ -10,4 +10,7 @@
 .globl mem_init
 .globl mem_drawMemUsage
 .globl mem_alloc
+.globl mem_allocZero
+.globl mem_allocObject
+.globl mem_allocObjectZero
 .globl mem_free

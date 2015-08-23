@@ -2,6 +2,7 @@
 #include "ui.h"
 #include "mem.h"
 #include "process.h"
+#include "control.h"
 
 #define MAX_WIDTH 1920
 #define MAX_HEIGHT 1080
@@ -49,6 +50,7 @@ m_startIconImageBitmap:
 	.int 32
 	.int 32
 	.int 0
+m_pRoot: .int 0
 
 .section .data
 .align 2
@@ -169,6 +171,32 @@ ui_init:
 	ldr r2,=m_startIconImageBitmap
 	bl ui_buildIcon
 
+	// Create the root control
+	pControl .req r4
+	mov r0,#sizeof_Control
+	mov r1,#PROCESS_KERNEL
+	bl mem_allocObjectZero
+	mov pControl,r0
+	ldr r1,=m_pRoot
+	str pControl,[r1]
+	mov r0,#0
+	str r0,[pControl,#Control_x]
+	bl screen_getHeight
+	sub r0,#TASK_BAR_HEIGHT
+	str r0,[pControl,#Control_y]
+	mov r0,#40
+	str r0,[pControl,#Control_width]
+	mov r0,#TASK_BAR_HEIGHT
+	str r0,[pControl,#Control_height]
+	ldr r0,=ui_startMenuButton_OnPaint
+	str r0,[pControl,#Control_OnPaint]
+	.unreq pControl
+
+	// Paint all of our controls the first time
+	ldr r0,=m_pRoot
+	ldr r0,[r0]
+	bl ui_paint
+
 	// Draw our context to the background
 	ldr r0,=MAIN_CONTEXT
 	ldr r1,=FRAME_BUFFER_BITMAP
@@ -287,3 +315,73 @@ ui_buildIcon:
 	.unreq color
 	.unreq image
 	pop {r4-r6,pc}
+
+.section .text
+ui_paint:
+	push {r4,lr}
+	pControl .req r4
+	mov pControl,r0
+
+	ui_paint_foreachChild$:
+		cmp pControl,#0
+		beq ui_paint_done$
+		ldr r1,[pControl,#Control_OnPaint]
+		cmp r1,#0
+		beq ui_paint_doChildren$ // It's null
+
+		// Paint self
+		mov r0,pControl
+		blx r1
+
+		ui_paint_doChildren$:
+
+			ldr pControl,[pControl,#Control_pNext]
+			b ui_paint_foreachChild$
+
+	ui_paint_done$:
+		pop {r4,pc}
+	.unreq pControl
+
+.section .text
+ui_startMenuButton_OnPaint:
+	push {r4-r8,lr}
+	pControl .req r8
+	mov pControl,r0
+
+	// Draw part of the taskbar
+	bl screen_getHeight
+	sub r3,r0,#TASK_BAR_HEIGHT
+	ldr r0,[pControl,#Control_x]
+	mov r1,#0
+	mov r2,r0
+	ldr r4,[pControl,#Control_width]
+	ldr r5,[pControl,#Control_height]
+	ldr r6,=TASK_BAR_BITMAP
+	ldr r7,=MAIN_CONTEXT
+	bl bitmap_blit
+
+	// Center the bitmap in X
+	ldr r0,[pControl,#Control_x]
+	ldr r2,=m_startIconBitmap
+	ldr r2,[r2,#BITMAP_width]
+	ldr r3,[pControl,#Control_width]
+	sub r3,r2
+	lsr r3,#1
+	add r0,r3
+
+	// Center the bitmap in Y
+	ldr r1,[pControl,#Control_y]
+	ldr r2,=m_startIconBitmap
+	ldr r2,[r2,#BITMAP_height]
+	ldr r3,[pControl,#Control_height]
+	sub r3,r2
+	lsr r3,#1
+	add r1,r3
+
+	// Draw the icon
+	ldr r2,=m_startIconBitmap
+	ldr r3,=MAIN_CONTEXT
+	bl bitmap_blitFullAlpha
+
+	.unreq pControl
+	pop {r4-r8,pc}

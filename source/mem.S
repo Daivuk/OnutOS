@@ -276,6 +276,43 @@ mem_init:
 	.unreq frameBufferAddr
 	pop {r4-r6,pc}
 
+mem_allocZero:
+    push {lr}
+    bl mem_alloc
+    sub r1,r0,#sizeof_MemBlock
+    ldr r1,[r1,#MemBlock_size]
+    lsr r1,#2
+    mov r2,r0
+    mov r3,#0
+    mem_allocZero_loop$:
+        subs r1,#1
+        str r3,[r2],#4
+        bne mem_allocZero_loop$
+    pop {pc}
+
+mem_allocObjectZero:
+    push {lr}
+    bl mem_alloc
+    sub r1,r0,#sizeof_MemBlock
+    ldr r1,[r1,#MemBlock_size]
+    lsr r1,#2
+    mov r2,r0
+    mov r3,#0
+    mem_allocZero_loop2$:
+        str r3,[r2],#4
+        subs r1,#1
+        bne mem_allocZero_loop2$
+    mov r1,#1
+    str r1,[r0]
+    pop {pc}
+
+mem_allocObject:
+    push {lr}
+    bl mem_alloc
+    mov r1,#1
+    str r1,[r0]
+    pop {pc}
+
 mem_alloc:
 	requestSize .req r0
 	requestProcessId .req r1
