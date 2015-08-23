@@ -52,6 +52,7 @@ m_startIconImageBitmap:
 	.int 32
 	.int 0
 m_pRoot: .int 0
+m_pHoverControl: .int 0
 
 .section .data
 .align 2
@@ -245,6 +246,20 @@ ui_drawCursor:
 	cmp r1,r2
 	beq ui_drawCursor_done$
 
+	// Movement was detected
+	// Update controls
+	pLastHoverControl .req r4
+	ldr r1,=m_pHoverControl
+	ldr pLastHoverControl,[r1]
+	mov r0,#0
+	str r0,[r1]
+	mov r0,x
+	mov r1,y
+	ldr r2,=m_pRoot
+	ldr r2,[r2]
+	bl ui_onMouseMove
+	.unreq pLastHoverControl
+
 	ui_drawCursor_draw$:
 		// Erase the cursor area
 		ldr r1,=m_cursorPos;
@@ -405,5 +420,66 @@ ui_startMenuButton_OnPaint:
 	ldr r3,=MAIN_CONTEXT
 	bl bitmap_blitFullAlpha
 
+	.unreq pControl
+	pop {r4-r8,pc}
+
+.section .text
+ui_startMenuButton_OnPaint_Hover:
+	push {r4-r8,lr}
+	pControl .req r8
+	mov pControl,r0
+
+	// Draw part of the taskbar
+	bl screen_getHeight
+	sub r3,r0,#TASK_BAR_HEIGHT
+	ldr r0,[pControl,#Control_x]
+	mov r1,#0
+	mov r2,r0
+	ldr r4,[pControl,#Control_width]
+	ldr r5,[pControl,#Control_height]
+	ldr r6,=TASK_BAR_HOVER_BITMAP
+	ldr r7,=MAIN_CONTEXT
+	bl bitmap_blit
+
+	// Center the bitmap in X
+	ldr r0,[pControl,#Control_x]
+	ldr r2,=m_startIconBitmap
+	ldr r2,[r2,#BITMAP_width]
+	ldr r3,[pControl,#Control_width]
+	sub r3,r2
+	lsr r3,#1
+	add r0,r3
+
+	// Center the bitmap in Y
+	ldr r1,[pControl,#Control_y]
+	ldr r2,=m_startIconBitmap
+	ldr r2,[r2,#BITMAP_height]
+	ldr r3,[pControl,#Control_height]
+	sub r3,r2
+	lsr r3,#1
+	add r1,r3
+
+	// Draw the icon
+	ldr r2,=m_startIconBitmap
+	ldr r3,=MAIN_CONTEXT
+	bl bitmap_blitFullAlpha
+
+	.unreq pControl
+	pop {r4-r8,pc}
+
+.section .text
+ui_onMouseMove:
+	push {r4-r8,lr}
+	mouseX .req r4
+	mouseY .req r5
+	pControl .req r6
+	mov mouseX,r0
+	mov mouseY,r1
+	mov pControl,r2
+
+	// Check if the mouse is within bounds
+
+	.unreq mouseX
+	.unreq mouseY
 	.unreq pControl
 	pop {r4-r8,pc}
