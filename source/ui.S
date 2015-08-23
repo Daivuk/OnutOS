@@ -207,12 +207,16 @@ ui_init:
 	bl screen_getHeight
 	sub r0,#TASK_BAR_HEIGHT
 	str r0,[pControl,#Control_y]
-	mov r0,#40
+	mov r0,#160
 	str r0,[pControl,#Control_width]
 	mov r0,#TASK_BAR_HEIGHT
 	str r0,[pControl,#Control_height]
 	ldr r0,=ui_startMenuButton_OnPaint
 	str r0,[pControl,#Control_OnPaint]
+	ldr r0,=ui_startMenuButton_OnMouseEnter
+	str r0,[pControl,#Control_OnMouseEnter]
+	ldr r0,=ui_startMenuButton_OnMouseLeave
+	str r0,[pControl,#Control_OnMouseLeave]
 	.unreq pControl
 
 	// Paint all of our controls the first time
@@ -237,13 +241,12 @@ ui_drawCursor:
 
 	// Make sure we moved. If the position
 	// is the same, ignore redraw
-	ldr r2,=m_cursorPos;
-	ldr r2,[r2,#0]
-	cmp r0,r2
+	ldr r1,=m_cursorPos;
+	ldr r0,[r1,#0]
+	ldr r1,[r1,#4]
+	cmp x,r0
 	bne ui_drawCursor_draw$
-	ldr r2,=m_cursorPos;
-	ldr r2,[r2,#4]
-	cmp r1,r2
+	cmp y,r1
 	beq ui_drawCursor_done$
 
 	// Movement was detected
@@ -258,6 +261,30 @@ ui_drawCursor:
 	ldr r2,=m_pRoot
 	ldr r2,[r2]
 	bl ui_onMouseMove
+	ldr r0,=m_pHoverControl
+	ldr r0,[r0]
+	cmp pLastHoverControl,r0
+	beq ui_drawCursor_draw$
+
+	// Notify old hover of his mouse leave
+	cmp pLastHoverControl,#0
+	beq ui_drawCursor_notifyMouseEnter$
+	ldr r1,[pLastHoverControl,#Control_OnMouseLeave]
+	cmp r1,#0
+	beq ui_drawCursor_notifyMouseEnter$
+	mov r0,pLastHoverControl
+	blx r1
+
+	ui_drawCursor_notifyMouseEnter$:
+	ldr r0,=m_pHoverControl
+	ldr r0,[r0]
+	cmp r0,#0
+	beq ui_drawCursor_draw$
+	ldr r1,[r0,#Control_OnMouseEnter]
+	cmp r1,#0
+	beq ui_drawCursor_draw$
+	blx r1
+
 	.unreq pLastHoverControl
 
 	ui_drawCursor_draw$:
@@ -355,8 +382,8 @@ ui_buildIcon:
 
 .section .text
 ui_paint:
-	push {r4,lr}
-	pControl .req r4
+	push {r4-r8,lr}
+	pControl .req r8
 	mov pControl,r0
 
 	ui_paint_foreachChild$:
@@ -370,14 +397,42 @@ ui_paint:
 		mov r0,pControl
 		blx r1
 
+		// We need to invalidate that rect,
+		// and draw to the main context
+		ldr r0,[pControl,#Control_x]
+		ldr r1,[pControl,#Control_y]
+		mov r2,r0
+		mov r3,r1
+		ldr r4,[pControl,#Control_width]
+		ldr r5,[pControl,#Control_height]
+		ldr r6,=MAIN_CONTEXT
+		ldr r7,=FRAME_BUFFER_BITMAP
+		bl bitmap_blit
+
 		ui_paint_doChildren$:
 
 			ldr pControl,[pControl,#Control_pNext]
 			b ui_paint_foreachChild$
 
 	ui_paint_done$:
-		pop {r4,pc}
+		pop {r4-r8,pc}
 	.unreq pControl
+
+.section .text
+ui_startMenuButton_OnMouseEnter:
+	push {lr}
+	ldr r1,=ui_startMenuButton_OnPaint_Hover
+	str r1,[r0,#Control_OnPaint]
+	bl ui_paint
+	pop {pc}
+
+.section .text
+ui_startMenuButton_OnMouseLeave:
+	push {lr}
+	ldr r1,=ui_startMenuButton_OnPaint
+	str r1,[r0,#Control_OnPaint]
+	bl ui_paint
+	pop {pc}
 
 .section .text
 ui_startMenuButton_OnPaint:
@@ -469,7 +524,7 @@ ui_startMenuButton_OnPaint_Hover:
 
 .section .text
 ui_onMouseMove:
-	push {r4-r8,lr}
+	push {r4-r6,lr}
 	mouseX .req r4
 	mouseY .req r5
 	pControl .req r6
@@ -478,8 +533,32 @@ ui_onMouseMove:
 	mov pControl,r2
 
 	// Check if the mouse is within bounds
+	ldr r0,[pControl,#Control_x]
+	cmp mouseX,r0
+	blo ui_onMouseMove_done$
 
+	ldr r1,[pControl,#Control_width]
+	add r1,r0
+	cmp mouseX,r1
+	bhs ui_onMouseMove_done$
+
+	ldr r0,[pControl,#Control_y]
+	cmp mouseY,r0
+	blo ui_onMouseMove_done$
+
+	ldr r1,[pControl,#Control_height]
+	add r1,r0
+	cmp mouseY,r1
+	bhs ui_onMouseMove_done$
+
+	// m_pHoverControl = pControl
+	ldr r0,=m_pHoverControl
+	str pControl,[r0]
+
+	// Now check children
+
+	ui_onMouseMove_done$:
+		pop {r4-r6,pc}
 	.unreq mouseX
 	.unreq mouseY
 	.unreq pControl
-	pop {r4-r8,pc}
