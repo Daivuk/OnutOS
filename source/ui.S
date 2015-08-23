@@ -19,6 +19,7 @@ DEFAULT_WALLPAPER_1080p_BITMAP:
 WALLPAPER_BITMAP: .space SIZEOF_BITMAP
 MAIN_CONTEXT: .space SIZEOF_BITMAP
 TASK_BAR_BITMAP: .space SIZEOF_BITMAP
+TASK_BAR_HOVER_BITMAP: .space SIZEOF_BITMAP
 m_cursorBitmap:
 	.int 20
 	.int 27
@@ -63,7 +64,8 @@ ICON_START_RAW: .incbin "iconStart.raw"
 
 .section .data
 .align 2
-TASK_BAR_COLOR: .int 0xFF7F7F7F
+TASK_BAR_COLOR: .int 0x80000000
+TASK_BAR_HOVER_COLOR: .int 0x80262626
 START_ICON_COLOR: .int 0xFF8E335B
 
 .section .text
@@ -106,20 +108,30 @@ ui_init:
 
 	// Create our task bar bitmap
 	ldr r4,=TASK_BAR_BITMAP
+	ldr r5,=TASK_BAR_HOVER_BITMAP
 	bl screen_getWidth
 	str r0,[r4,#BITMAP_width]
+	str r0,[r5,#BITMAP_width]
 	mov r0,#TASK_BAR_HEIGHT
 	str r0,[r4,#BITMAP_height]
+	str r0,[r5,#BITMAP_height]
 	mov r0,#32
 	str r0,[r4,#BITMAP_bbp]
+	str r0,[r5,#BITMAP_bbp]
 
 	bl screen_getWidth // Allocate memory for our bitmap
 	mov r1,#TASK_BAR_HEIGHT
 	mul r0,r1
-	lsl r0,#PROCESS_KERNEL
+	lsl r0,#2
+	mov r6,r0
 	mov r1,#1
 	bl mem_alloc
 	str r0,[r4,#BITMAP_addr]
+	
+	mov r0,r6
+	mov r1,#1
+	bl mem_alloc
+	str r0,[r5,#BITMAP_addr]
 
 	// Blit part of the main background to the task bar
 	mov r0,#0					// src x = 0
@@ -133,11 +145,21 @@ ui_init:
 	mov r5,#TASK_BAR_HEIGHT		// height
 	bl bitmap_blit
 
-	// Tone it down by 50%
+	ldr r0,=TASK_BAR_BITMAP
+	ldr r1,=TASK_BAR_HOVER_BITMAP
+	bl bitmap_copy
+
+	// Tone it down
 	ldr r0,=TASK_BAR_BITMAP
 	ldr r1,=TASK_BAR_COLOR
 	ldr r1,[r1]
-	bl bitmap_multColor
+	bl bitmap_fillAlpha
+	
+	// Tone it down a bit less for hover state
+	ldr r0,=TASK_BAR_HOVER_BITMAP
+	ldr r1,=TASK_BAR_HOVER_COLOR
+	ldr r1,[r1]
+	bl bitmap_fillAlpha
 
 	// Load the cursors
 	ldr r0,=m_cursorBitmap

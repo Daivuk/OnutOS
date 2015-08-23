@@ -96,6 +96,11 @@ bitmap_copyAlpha:
 		and srcR,r0,#0xFF
 		lsr srcA,r0,#8
 
+        mul srcR,srcA
+        mul srcG,srcA
+        mul srcB,srcA
+        rsb srcA,srcA,#0xFF
+
 		// Decompose destination
 		and dstB,r1,#0xFF
 		lsr r1,#8
@@ -105,34 +110,19 @@ bitmap_copyAlpha:
 		lsr dstA,r1,#8
 
 		// Do the maths
-		mul srcR,srcA
-		mov r0,#0xFF
-		sub r0,srcA
-		mul dstR,r0
-		add dstR,srcR
+        mla dstR,dstR,srcA,srcR
 		lsr dstR,#8
 
-		mul srcG,srcA
-		mov r0,#0xFF
-		sub r0,srcA
-		mul dstG,r0
-		add dstG,srcG
+        mla dstG,dstG,srcA,srcG
 		lsr dstG,#8
 
-		mul srcB,srcA
-		mov r0,#0xFF
-		sub r0,srcA
-		mul dstB,r0
-		add dstB,srcB
+        mla dstB,dstB,srcA,srcB
 		lsr dstB,#8
 
 		// Recompose destination color
-		lsl r1,dstA,#24
-		lsl dstR,#16
-		orr r1,dstR
-		lsl dstG,#8
-		orr r1,dstG
-		orr r1,dstB
+        orr r1,dstB,dstA,lsl #24
+        orr r1,r1,dstR,lsl #16
+        orr r1,r1,dstG,lsl #8
 
 		// Store result
 		str r1,[dstBitmap],#4
@@ -155,7 +145,7 @@ bitmap_copyAlpha:
 
 .section .text
 bitmap_alphaBlendPixel:
-	push {r4-r8,lr}
+	push {r4-r7,lr}
 	srcA .req r0
 	srcR .req r4
 	srcG .req r2
@@ -181,35 +171,25 @@ bitmap_alphaBlendPixel:
 	and dstR,r1,#0xFF
 	lsr dstA,r1,#8
 
+    mul srcR,srcA;
+    mul srcG,srcA;
+    mul srcB,srcA;
+    rsb srcA,srcA,#0xFF
+
 	// Do the maths
-	mul srcR,srcA
-	mov r8,#0xFF
-	sub r8,srcA
-	mul dstR,r8
-	add dstR,srcR
+	mla dstR,dstR,srcA,srcR
 	lsr dstR,#8
 
-	mul srcG,srcA
-	mov r8,#0xFF
-	sub r8,srcA
-	mul dstG,r8
-	add dstG,srcG
+	mla dstG,dstG,srcA,srcG
 	lsr dstG,#8
 
-	mul srcB,srcA
-	mov r8,#0xFF
-	sub r8,srcA
-	mul dstB,r8
-	add dstB,srcB
+	mla dstB,dstB,srcA,srcB
 	lsr dstB,#8
 
 	// Recompose destination color
-	lsl r0,dstA,#24
-	lsl dstR,#16
-	orr r0,dstR
-	lsl dstG,#8
-	orr r0,dstG
-	orr r0,dstB
+    orr r0,dstB,dstA,lsl #24
+    orr r0,r0,dstR,lsl #16
+    orr r0,r0,dstG,lsl #8
 
 	.unreq srcR
 	.unreq srcG
@@ -220,7 +200,7 @@ bitmap_alphaBlendPixel:
 	.unreq dstB
 	.unreq dstA
 
-	pop {r4-r8,pc}
+	pop {r4-r7,pc}
 
 .section .text
 // Do a plain copy from a bitmap to another one, but alpha blend additive
@@ -284,30 +264,24 @@ bitmap_copyAlphaAdd:
 
 		// Do the maths
 		mul srcR,srcA
-		lsr srcR,#8
-		add dstR,srcR
+		add dstR,dstR,srcR,lsr #8
 		cmp dstR,#0xFF
 		movhi dstR,#0xFF
 
 		mul srcG,srcA
-		lsr srcG,#8
-		add dstG,srcG
+		add dstG,dstG,srcG,lsr #8
 		cmp dstG,#0xFF
 		movhi dstG,#0xFF
 
 		mul srcB,srcA
-		lsr srcB,#8
-		add dstB,srcB
+		add dstB,dstB,srcB,lsr #8
 		cmp dstB,#0xFF
 		movhi dstB,#0xFF
 
 		// Recompose destination color
-		lsl r1,dstA,#24
-		lsl dstR,#16
-		orr r1,dstR
-		lsl dstG,#8
-		orr r1,dstG
-		orr r1,dstB
+        orr r1,dstB,dstA,lsl #24
+        orr r1,r1,dstR,lsl #16
+        orr r1,r1,dstG,lsl #8
 
 		// Store result
 		str r1,[dstBitmap],#4
@@ -603,7 +577,9 @@ bitmap_blitAlpha:
 		ui_blit_loopX_alpha$:
 			ldr r0,[srcBitmap],#4
 			ldr r1,[dstBitmap]
+
 			bl bitmap_alphaBlendPixel
+
 			str r0,[dstBitmap],#4
 			subs x,#1
 			bne ui_blit_loopX_alpha$
@@ -819,6 +795,90 @@ bitmap_fill:
 	.unreq size
 	.unreq bitmap
 	mov pc,lr
+
+// r0 = bitmap
+// r1 = color
+.section .text
+bitmap_fillAlpha:
+	push {r4-r10,lr}
+	bitmap .req r0
+	color .req r1
+	size .req r2
+    tmp .req r3
+    invSrcA .req r3
+	srcR .req r4
+	srcG .req r5
+	srcB .req r6
+	srcA .req r3
+	dstR .req r7
+	dstG .req r8
+	dstB .req r9
+	dstA .req r10
+
+	ldr size,[bitmap,#BITMAP_width]
+	ldr tmp,[bitmap,#BITMAP_height]
+	mul size,tmp
+
+    // Decompose source
+	and srcB,color,#0xFF
+	lsr color,#8
+	and srcG,color,#0xFF
+	lsr color,#8
+	and srcR,color,#0xFF
+	lsr srcA,color,#8
+
+    mul srcR,srcA
+    mul srcG,srcA
+    mul srcB,srcA
+    rsb invSrcA,srcA,#0xFF
+
+	ldr bitmap,[bitmap,#BITMAP_addr]
+
+	bitmap_fill_loopAlpha$:
+		ldr color,[bitmap]
+
+		// Decompose destination
+		and dstB,color,#0xFF
+		lsr color,#8
+		and dstG,color,#0xFF
+		lsr color,#8
+		and dstR,color,#0xFF
+		lsr dstA,color,#8
+
+		// Do the maths
+		mla dstR,dstR,invSrcA,srcR
+		lsr dstR,#8
+
+		mla dstG,dstG,invSrcA,srcG
+		lsr dstG,#8
+
+		mla dstB,dstB,invSrcA,srcB
+		lsr dstB,#8
+
+		// Recompose destination color
+        orr color,dstB,dstA,lsl #24
+        orr color,color,dstR,lsl #16
+        orr color,color,dstG,lsl #8
+
+		str color,[bitmap],#4
+
+		subs size,#1
+		bne bitmap_fill_loopAlpha$
+		
+	.unreq color
+	.unreq size
+	.unreq bitmap
+	.unreq srcR
+	.unreq srcG
+	.unreq srcB
+	.unreq srcA
+	.unreq dstR
+	.unreq dstG
+	.unreq dstB
+	.unreq dstA
+    .unreq tmp
+    .unreq invSrcA
+    pop {r4-r10,pc}
 
 .section .text
 bitmap_mask:

@@ -93,6 +93,7 @@
 // r0 = bitmap
 // r1 = color
 .globl bitmap_fill
+.globl bitmap_fillAlpha
 
 // Mask out a bitmap using the alpha of another
 // r0 = source bitmap (The mask)
